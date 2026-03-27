@@ -34,6 +34,11 @@ export const PROJECTILE_SPEED = 650;
 export const PROJECTILE_LIFETIME = 1800;
 export const PROJECTILE_HIT_RADIUS = 20;
 
+export const GRENADE_RADIUS = 100;
+export const GRENADE_SPEED = 380;
+export const GRENADE_FUSE_MS = 900;
+export const SLOW_SPEED_MULT = 0.35;
+
 export const ROUND_BASE_TIMER_S = 35;
 export const ROUND_BASE_NODES = 4;
 
@@ -54,13 +59,21 @@ export interface WeaponConfig {
   damage: number;
   projectileCount: number;
   spread: number;
+  /** If set, projectile explodes in an area on impact or fuse expiry */
+  areaRadius?: number;
+  /** Status effect applied to enemies hit by this weapon */
+  effectType?: 'slow' | 'disorient';
+  /** Duration of the status effect in ms */
+  effectDuration?: number;
 }
 
 export const WEAPONS: WeaponConfig[] = [
-  { id: 'pistol',  label: '🔫 PISTOL',   desc: 'Balanced auto-fire',         cost: 0,   fireRate: 400,  damage: 10, projectileCount: 1, spread: 0    },
-  { id: 'smg',     label: '⚡ SMG',       desc: 'Rapid fire, lower damage',   cost: 150, fireRate: 130,  damage: 7,  projectileCount: 1, spread: 0.05 },
-  { id: 'shotgun', label: '💥 SHOTGUN',  desc: '3-shot burst, slow reload',   cost: 300, fireRate: 750,  damage: 18, projectileCount: 3, spread: 0.3  },
-  { id: 'sniper',  label: '🎯 SNIPER',   desc: 'High damage, slow fire',      cost: 500, fireRate: 1400, damage: 45, projectileCount: 1, spread: 0    },
+  { id: 'pistol',   label: '🔫 PISTOL',   desc: 'Balanced auto-fire',           cost: 0,   fireRate: 400,  damage: 10, projectileCount: 1, spread: 0    },
+  { id: 'smg',      label: '⚡ SMG',       desc: 'Rapid fire, lower damage',     cost: 150, fireRate: 130,  damage: 7,  projectileCount: 1, spread: 0.05 },
+  { id: 'shotgun',  label: '💥 SHOTGUN',  desc: '3-shot burst, slow reload',     cost: 300, fireRate: 750,  damage: 18, projectileCount: 3, spread: 0.3  },
+  { id: 'sniper',   label: '🎯 SNIPER',   desc: 'High damage, slow fire',        cost: 500, fireRate: 1400, damage: 45, projectileCount: 1, spread: 0    },
+  { id: 'grenade',  label: '💣 GRENADE',  desc: 'Area blast, disorienting foes', cost: 400, fireRate: 1600, damage: 40, projectileCount: 1, spread: 0,   areaRadius: 100, effectType: 'disorient', effectDuration: 1500 },
+  { id: 'emp',      label: '🧊 EMP RIFLE', desc: 'Slows enemies on hit',          cost: 450, fireRate: 800,  damage: 12, projectileCount: 1, spread: 0,   effectType: 'slow', effectDuration: 2000 },
 ];
 
 export const UPGRADES: Upgrade[] = [
@@ -70,6 +83,9 @@ export const UPGRADES: Upgrade[] = [
   { id: 'scoreMultiplier', label: '💰 DATA BROKER',   desc: '+0.5× score multiplier'  },
   { id: 'hpRegen',         label: '💉 NANO-PATCH',    desc: 'Restore 40 HP'           },
   { id: 'comboWindow',     label: '🔗 CHAIN HACK',    desc: '+1.5s combo window'      },
+  { id: 'fireRateBoost',   label: '🔥 OVERCLOCK',     desc: '-20% weapon fire delay'  },
+  { id: 'damageBoost',     label: '⚔️ NEURAL AMP',    desc: '+8 weapon damage'        },
+  { id: 'multiShot',       label: '🔱 SPLIT SHOT',    desc: '+1 projectile/shot'      },
 ];
 
 export interface Upgrade {

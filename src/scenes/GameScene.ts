@@ -208,7 +208,7 @@ export class GameScene extends Phaser.Scene {
       const nx = Math.floor(rng() * (WORLD_WIDTH - 200)) + 100;
       const ny = Math.floor(rng() * (WORLD_HEIGHT - 200)) + 100;
       const node = new HackNode(this, nx, ny, false);
-      if (this.hackSpeedMult < 1.0) node.hackTimeMs *= this.hackSpeedMult;
+      node.hackTimeMs *= this.hackSpeedMult;
       this.nodes.push(node);
     }
 
@@ -216,7 +216,7 @@ export class GameScene extends Phaser.Scene {
     const exitX = Math.floor(rng() * (WORLD_WIDTH - 200)) + 100;
     const exitY = Math.floor(rng() * (WORLD_HEIGHT - 200)) + 100;
     const exitNode = new HackNode(this, exitX, exitY, true);
-    if (this.hackSpeedMult < 1.0) exitNode.hackTimeMs *= this.hackSpeedMult;
+    exitNode.hackTimeMs *= this.hackSpeedMult;
     this.nodes.push(exitNode);
   }
 

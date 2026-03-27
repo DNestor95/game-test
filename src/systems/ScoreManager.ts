@@ -29,7 +29,10 @@ export class ScoreManager {
   get xp() { return this._xp; }
   get playerLevel() { return this._playerLevel; }
   /** XP required to reach the next level */
-  get xpToNext() { return this._playerLevel * XP_PER_LEVEL; }
+  get xpToNext() { return this.xpForLevel(this._playerLevel); }
+
+  /** Calculate XP threshold for advancing beyond the given level. */
+  private xpForLevel(level: number) { return level * XP_PER_LEVEL; }
 
   addMultiplier(delta: number) { this._multiplier = Math.max(1, this._multiplier + delta); }
   extendComboWindow(ms: number) { this._comboWindowMs += ms; }
@@ -40,7 +43,7 @@ export class ScoreManager {
    */
   addXP(amount: number): boolean {
     this._xp += amount;
-    const needed = this._playerLevel * XP_PER_LEVEL;
+    const needed = this.xpForLevel(this._playerLevel);
     if (this._xp >= needed) {
       this._xp -= needed; // carry over excess XP into the next level
       this._playerLevel += 1;

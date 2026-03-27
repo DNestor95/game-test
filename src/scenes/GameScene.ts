@@ -18,6 +18,7 @@ import {
   Upgrade, StatBoostType,
   XP_PER_KILL, XP_PER_HACK, XP_PER_EXIT,
   BASE_LEVEL_SEED, createSeededRNG,
+  OVERTIME_COUNT_MULT, OVERTIME_HP_MULT,
 } from '../config/GameConfig';
 
 type RoundPhase = 'INTRO' | 'ACTIVE' | 'ROUND_RESULT' | 'GAME_OVER';
@@ -42,6 +43,7 @@ export class GameScene extends Phaser.Scene {
   private scoreMgr!: ScoreManager;
 
   private heat = 0;
+  private overtimeMode = false;
   private roundTimerMs = 0;
   private phase: RoundPhase = 'INTRO';
   private introTimer = 0;
@@ -78,6 +80,7 @@ export class GameScene extends Phaser.Scene {
     this.roundMgr = new RoundManager();
     this.scoreMgr = new ScoreManager();
     this.heat = 0;
+    this.overtimeMode = false;
     this.phase = 'INTRO';
     this.introTimer = 1000;
     this.introCountdown = 3;
@@ -143,6 +146,7 @@ export class GameScene extends Phaser.Scene {
   private startRound() {
     const cfg = this.roundMgr.getRoundConfig();
     this.roundTimerMs = cfg.timerSec * 1000;
+    this.overtimeMode = false;
     this.phase = 'INTRO';
     this.introTimer = 1000;
     this.introCountdown = 3;
@@ -360,15 +364,19 @@ export class GameScene extends Phaser.Scene {
     this.roundTimerMs -= delta;
     if (this.roundTimerMs <= 0) {
       this.roundTimerMs = 0;
-      this.endRun();
-      return;
+      if (!this.overtimeMode) {
+        this.overtimeMode = true;
+        this.getUIScene()?.showMessage('⚠ OVERTIME! ⚠', '#ff4400', 2500);
+      }
     }
 
     this.heat = Math.max(0, this.heat - 0.0005 * delta);
 
     this.enemySpawnTimer -= delta;
     if (this.enemySpawnTimer <= 0) {
-      this.spawnEnemy(cfg.enemySpeedMult, cfg.enemyCountMult, cfg.enemyHpMult);
+      const countMult = cfg.enemyCountMult * (this.overtimeMode ? OVERTIME_COUNT_MULT : 1);
+      const hpMult = cfg.enemyHpMult * (this.overtimeMode ? OVERTIME_HP_MULT : 1);
+      this.spawnEnemy(cfg.enemySpeedMult, countMult, hpMult);
       const interval = this.enemySpawnInterval / (1 + this.heat * 3);
       this.enemySpawnTimer = Math.max(600, interval);
     }
@@ -692,6 +700,7 @@ export class GameScene extends Phaser.Scene {
         credits: this.scoreMgr.credits,
         round: this.roundMgr.round,
         timerSec: this.roundTimerMs / 1000,
+        bonusMode: this.overtimeMode,
         hp: this.player.hp,
         heat: this.heat,
         combo: this.scoreMgr.combo,

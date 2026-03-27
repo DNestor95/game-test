@@ -92,6 +92,7 @@ export class UIScene extends Phaser.Scene {
     credits: number;
     round: number;
     timerSec: number;
+    bonusMode: boolean;
     hp: number;
     heat: number;
     combo: number;
@@ -111,9 +112,14 @@ export class UIScene extends Phaser.Scene {
     this.scoreText.setText(`SCORE: ${data.score}`);
     this.creditsText.setText(`¥ ${data.credits}`);
     this.roundText.setText(`ROUND ${data.round}`);
-    this.timerText.setText(`TIME: ${Math.ceil(data.timerSec)}`);
-    const timerColor = data.timerSec < 10 ? '#ff2200' : '#ff8800';
-    this.timerText.setColor(timerColor);
+    if (data.bonusMode) {
+      this.timerText.setText('OVERTIME!');
+      this.timerText.setColor('#ff4400');
+    } else {
+      this.timerText.setText(`TIME: ${Math.ceil(data.timerSec)}`);
+      const timerColor = data.timerSec < 10 ? '#ff2200' : '#ff8800';
+      this.timerText.setColor(timerColor);
+    }
 
     this.hpBar.clear();
     const hpFrac = Math.max(0, data.hp / PLAYER_MAX_HP);

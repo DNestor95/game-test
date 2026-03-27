@@ -42,6 +42,11 @@ export const SLOW_SPEED_MULT = 0.35;
 export const ROUND_BASE_TIMER_S = 35;
 export const ROUND_BASE_NODES = 4;
 
+/** Extra enemy count multiplier applied when time expires (overtime mode) */
+export const OVERTIME_COUNT_MULT = 1.5;
+/** Extra enemy HP multiplier applied when time expires (overtime mode) */
+export const OVERTIME_HP_MULT = 1.5;
+
 /** XP awarded for killing an enemy */
 export const XP_PER_KILL = 15;
 /** XP awarded for hacking a regular node */

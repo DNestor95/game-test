@@ -18,6 +18,13 @@ export class Player extends Phaser.GameObjects.Container {
   hp = PLAYER_MAX_HP;
   maxHp = PLAYER_MAX_HP;
 
+  /** Mutable move speed — increased by upgrades/node boosts */
+  moveSpeed = PLAYER_SPEED;
+  /** Bonus flat damage added to each projectile */
+  weaponDamage = 0;
+  /** Extra projectiles fired per shot (stacks) */
+  extraProjectiles = 0;
+
   isDashing = false;
   dashCooldownRemaining = 0;
   dashCooldownMs: number;
@@ -76,26 +83,40 @@ export class Player extends Phaser.GameObjects.Container {
       this.circle.setAlpha(1);
     }
 
+    // Aim direction always follows mouse cursor
+    const pointer = this.scene.input.activePointer;
+    const aimDx = pointer.worldX - this.x;
+    const aimDy = pointer.worldY - this.y;
+    const aimLen = Math.sqrt(aimDx * aimDx + aimDy * aimDy) || 1;
+    this.facingX = aimDx / aimLen;
+    this.facingY = aimDy / aimLen;
+    const aimAngle = Math.atan2(this.facingY, this.facingX) + Math.PI / 2;
+    this.indicator.setRotation(aimAngle);
+
     if (this.isDashing) return;
 
+    // WASD movement (priority)
     let vx = 0, vy = 0;
     if (this.keys.left.isDown)  vx -= 1;
     if (this.keys.right.isDown) vx += 1;
     if (this.keys.up.isDown)    vy -= 1;
     if (this.keys.down.isDown)  vy += 1;
 
-    const speed = PLAYER_SPEED;
-    const len = Math.sqrt(vx * vx + vy * vy) || 1;
-    if (vx !== 0 || vy !== 0) {
-      this.facingX = vx / len;
-      this.facingY = vy / len;
+    // Mouse-follow movement: if no WASD, move toward cursor when cursor is far
+    if (vx === 0 && vy === 0) {
+      const dist = Math.sqrt(aimDx * aimDx + aimDy * aimDy);
+      if (dist > 30) {
+        vx = aimDx / aimLen;
+        vy = aimDy / aimLen;
+      }
     }
 
-    this.body_.setVelocity((vx / len) * speed || 0, (vy / len) * speed || 0);
-    if (vx === 0 && vy === 0) this.body_.setVelocity(0, 0);
-
-    const angle = Math.atan2(this.facingY, this.facingX) + Math.PI / 2;
-    this.indicator.setRotation(angle);
+    const len = Math.sqrt(vx * vx + vy * vy) || 1;
+    if (vx !== 0 || vy !== 0) {
+      this.body_.setVelocity((vx / len) * this.moveSpeed, (vy / len) * this.moveSpeed);
+    } else {
+      this.body_.setVelocity(0, 0);
+    }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.dash) && this.dashCooldownRemaining <= 0) {
       this.isDashing = true;
@@ -115,6 +136,11 @@ export class Player extends Phaser.GameObjects.Container {
     return this.keys.hack.isDown;
   }
 
+  /** Current aim angle in radians (toward mouse cursor) */
+  getAimAngle(): number {
+    return Math.atan2(this.facingY, this.facingX);
+  }
+
   takeDamage(amount: number): boolean {
     if (this.invincibleTimer > 0) return false;
     this.hp = Math.max(0, this.hp - amount);
@@ -127,3 +153,4 @@ export class Player extends Phaser.GameObjects.Container {
 
   healBy(amount: number) { this.hp = Math.min(this.maxHp, this.hp + amount); }
 }
+

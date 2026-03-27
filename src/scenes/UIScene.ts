@@ -3,6 +3,7 @@ import { GAME_WIDTH, PLAYER_MAX_HP } from '../config/GameConfig';
 
 export class UIScene extends Phaser.Scene {
   private scoreText!: Phaser.GameObjects.Text;
+  private creditsText!: Phaser.GameObjects.Text;
   private roundText!: Phaser.GameObjects.Text;
   private timerText!: Phaser.GameObjects.Text;
   private hpBar!: Phaser.GameObjects.Graphics;
@@ -10,14 +11,21 @@ export class UIScene extends Phaser.Scene {
   private comboText!: Phaser.GameObjects.Text;
   private nodesText!: Phaser.GameObjects.Text;
   private dashText!: Phaser.GameObjects.Text;
+  private weaponText!: Phaser.GameObjects.Text;
+  private exitText!: Phaser.GameObjects.Text;
 
   constructor() { super({ key: 'UIScene' }); }
 
   create() {
+    // Top bar
     this.add.rectangle(GAME_WIDTH / 2, 20, GAME_WIDTH, 40, 0x000000, 0.7);
 
     this.scoreText = this.add.text(10, 8, 'SCORE: 0', {
-      fontSize: '14px', color: '#00ffcc', fontFamily: 'Courier New',
+      fontSize: '13px', color: '#00ffcc', fontFamily: 'Courier New',
+    });
+
+    this.creditsText = this.add.text(10, 23, '¥ 0', {
+      fontSize: '11px', color: '#ffcc00', fontFamily: 'Courier New',
     });
 
     this.roundText = this.add.text(GAME_WIDTH / 2, 8, 'ROUND 1', {
@@ -28,6 +36,7 @@ export class UIScene extends Phaser.Scene {
       fontSize: '14px', color: '#ff8800', fontFamily: 'Courier New',
     }).setOrigin(1, 0);
 
+    // Bottom bar
     this.add.rectangle(GAME_WIDTH / 2, 580, GAME_WIDTH, 40, 0x000000, 0.7);
 
     this.add.text(10, 568, 'HP', {
@@ -48,23 +57,38 @@ export class UIScene extends Phaser.Scene {
       fontSize: '12px', color: '#00ff88', fontFamily: 'Courier New',
     }).setOrigin(1, 0);
 
+    // Dash cooldown indicator
     this.dashText = this.add.text(GAME_WIDTH / 2, 42, '', {
       fontSize: '11px', color: '#888888', fontFamily: 'Courier New',
     }).setOrigin(0.5, 0);
+
+    // Current weapon (bottom left area)
+    this.weaponText = this.add.text(10, 590, '', {
+      fontSize: '10px', color: '#aaaaaa', fontFamily: 'Courier New',
+    });
+
+    // Exit node status indicator
+    this.exitText = this.add.text(GAME_WIDTH - 10, 556, '', {
+      fontSize: '11px', color: '#ffcc00', fontFamily: 'Courier New',
+    }).setOrigin(1, 0);
   }
 
   updateHUD(data: {
     score: number;
+    credits: number;
     round: number;
     timerSec: number;
     hp: number;
     heat: number;
     combo: number;
     nodesHacked: number;
-    nodesRequired: number;
+    nodesTotal: number;
     dashCooldownFrac: number;
+    weaponLabel: string;
+    exitHacked: boolean;
   }) {
     this.scoreText.setText(`SCORE: ${data.score}`);
+    this.creditsText.setText(`¥ ${data.credits}`);
     this.roundText.setText(`ROUND ${data.round}`);
     this.timerText.setText(`TIME: ${Math.ceil(data.timerSec)}`);
     const timerColor = data.timerSec < 10 ? '#ff2200' : '#ff8800';
@@ -93,7 +117,7 @@ export class UIScene extends Phaser.Scene {
       this.comboText.setText('');
     }
 
-    this.nodesText.setText(`NODES: ${data.nodesHacked}/${data.nodesRequired}`);
+    this.nodesText.setText(`NODES: ${data.nodesHacked}/${data.nodesTotal}`);
 
     if (data.dashCooldownFrac > 0) {
       this.dashText.setText(`DASH: ${Math.ceil(data.dashCooldownFrac * 100)}%`);
@@ -101,6 +125,14 @@ export class UIScene extends Phaser.Scene {
     } else {
       this.dashText.setText('DASH READY');
       this.dashText.setColor('#00ffcc');
+    }
+
+    this.weaponText.setText(data.weaponLabel);
+
+    if (data.exitHacked) {
+      this.exitText.setText('');
+    } else {
+      this.exitText.setText('[EXIT NODE: FIND IT]');
     }
   }
 
@@ -112,3 +144,4 @@ export class UIScene extends Phaser.Scene {
     this.time.delayedCall(duration, () => msg.destroy());
   }
 }
+

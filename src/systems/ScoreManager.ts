@@ -8,6 +8,9 @@ export class ScoreManager {
   private _comboWindowMs: number;
   private _bestScore: number;
 
+  /** Spendable credits (earned from kills & hacks; reduced when purchasing items) */
+  private _credits = 0;
+
   constructor() {
     this._comboWindowMs = HACK_COMBO_WINDOW_MS;
     this._bestScore = parseInt(localStorage.getItem(BEST_SCORE_KEY) ?? '0', 10) || 0;
@@ -17,6 +20,7 @@ export class ScoreManager {
   get combo() { return this._combo; }
   get multiplier() { return this._multiplier; }
   get bestScore() { return this._bestScore; }
+  get credits() { return this._credits; }
 
   addMultiplier(delta: number) { this._multiplier = Math.max(1, this._multiplier + delta); }
   extendComboWindow(ms: number) { this._comboWindowMs += ms; }
@@ -35,6 +39,22 @@ export class ScoreManager {
     return points;
   }
 
+  /** Add flat money (from kills or bonus rewards) — updates both score and credits */
+  addMoney(amount: number) {
+    this._score += amount;
+    this._credits += amount;
+  }
+
+  /**
+   * Spend credits to purchase something.
+   * @returns true if the purchase succeeded, false if insufficient credits.
+   */
+  spendCredits(amount: number): boolean {
+    if (this._credits < amount) return false;
+    this._credits -= amount;
+    return true;
+  }
+
   breakCombo() {
     this._combo = 0;
   }
@@ -48,9 +68,11 @@ export class ScoreManager {
 
   reset() {
     this._score = 0;
+    this._credits = 0;
     this._combo = 0;
     this._multiplier = 1;
     this._lastHackTime = 0;
     this._comboWindowMs = HACK_COMBO_WINDOW_MS;
   }
 }
+

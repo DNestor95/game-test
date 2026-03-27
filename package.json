@@ -1,1 +1,16 @@
-{\n  "name": "game-test",\n  "version": "1.0.0",\n  "scripts": {\n    "build": "vite build",\n    "dev": "vite",\n    "serve": "vite preview"\n  },\n  "dependencies": {\n    "phaser": "^3.60.0"\n  },\n  "devDependencies": {\n    "typescript": "^4.5.2",\n    "vite": "^2.9.1"\n  }\n}
+{
+  "name": "game-test",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "serve": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.60.0"
+  },
+  "devDependencies": {
+    "typescript": "^4.5.2",
+    "vite": "^2.9.1"
+  }
+}

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ENEMY_BASE_SPEED, ENEMY_DAMAGE, ENEMY_HIT_COOLDOWN, ENEMY_HP, ENEMY_KILL_MONEY } from '../config/GameConfig';
+import { ENEMY_BASE_SPEED, ENEMY_DAMAGE, ENEMY_HIT_COOLDOWN, ENEMY_HP, ENEMY_KILL_MONEY, SLOW_SPEED_MULT } from '../config/GameConfig';
 
 export class Enemy extends Phaser.GameObjects.Container {
   private body_!: Phaser.Physics.Arcade.Body;
@@ -11,6 +11,14 @@ export class Enemy extends Phaser.GameObjects.Container {
   hp: number;
   maxHp: number;
   readonly moneyReward = ENEMY_KILL_MONEY;
+
+  /** Remaining ms of slow effect (reduces move speed) */
+  private slowTimer = 0;
+  /** Remaining ms of disorient effect (random movement) */
+  private disorientTimer = 0;
+  private disorientChangeTimer = 0;
+  private disorientVx = 0;
+  private disorientVy = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, speedMult = 1) {
     super(scene, x, y);
@@ -31,15 +39,60 @@ export class Enemy extends Phaser.GameObjects.Container {
     this.add([this.core, this.eye]);
   }
 
+  /** Apply a status effect to this enemy */
+  applyEffect(type: 'slow' | 'disorient', duration: number) {
+    if (type === 'slow') {
+      this.slowTimer = Math.max(this.slowTimer, duration);
+      this.core.setStrokeStyle(2, 0x4488ff, 1);
+    } else {
+      this.disorientTimer = Math.max(this.disorientTimer, duration);
+      this.disorientChangeTimer = 0; // pick a new random direction immediately
+      this.core.setStrokeStyle(2, 0xcc44ff, 1);
+    }
+  }
+
   update(delta: number, px: number, py: number) {
     if (this.hitCooldown > 0) this.hitCooldown -= delta;
-    const dx = px - this.x;
-    const dy = py - this.y;
-    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    this.body_.setVelocity((dx / dist) * this.speed, (dy / dist) * this.speed);
 
-    const angle = Math.atan2(dy, dx);
-    this.eye.setPosition(Math.cos(angle) * 7, Math.sin(angle) * 7);
+    // Tick status effects
+    if (this.slowTimer > 0) {
+      this.slowTimer -= delta;
+      if (this.slowTimer <= 0) {
+        this.core.setStrokeStyle(2, 0xff2200, 1);
+      }
+    }
+    if (this.disorientTimer > 0) {
+      this.disorientTimer -= delta;
+      this.disorientChangeTimer -= delta;
+      if (this.disorientChangeTimer <= 0) {
+        const rAngle = Math.random() * Math.PI * 2;
+        this.disorientVx = Math.cos(rAngle);
+        this.disorientVy = Math.sin(rAngle);
+        this.disorientChangeTimer = 500;
+      }
+      if (this.disorientTimer <= 0) {
+        this.core.setStrokeStyle(2, 0xff2200, 1);
+      }
+    }
+
+    let dx: number, dy: number, dist: number;
+    if (this.disorientTimer > 0) {
+      dx = this.disorientVx;
+      dy = this.disorientVy;
+      dist = 1;
+    } else {
+      dx = px - this.x;
+      dy = py - this.y;
+      dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    }
+
+    const speedMult = this.slowTimer > 0 ? SLOW_SPEED_MULT : 1;
+    this.body_.setVelocity((dx / dist) * this.speed * speedMult, (dy / dist) * this.speed * speedMult);
+
+    const eyeAngle = this.disorientTimer > 0
+      ? Math.atan2(this.disorientVy, this.disorientVx)
+      : Math.atan2(dy, dx);
+    this.eye.setPosition(Math.cos(eyeAngle) * 7, Math.sin(eyeAngle) * 7);
   }
 
   canHit(): boolean { return this.hitCooldown <= 0; }

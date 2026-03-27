@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { Player } from '../objects/Player';
 import { HackNode } from '../objects/HackNode';
 import { Enemy } from '../objects/Enemy';
-import { Projectile } from '../objects/Projectile';
+import { Projectile, ProjectileOptions } from '../objects/Projectile';
 import { RoundManager } from '../systems/RoundManager';
 import { ScoreManager } from '../systems/ScoreManager';
 import { UIScene } from './UIScene';
@@ -12,6 +12,7 @@ import {
   HEAT_PER_HACK, HEAT_DAMAGE_SPIKE,
   FINAL_NODE_MONEY, NODE_HACK_MONEY,
   PROJECTILE_HIT_RADIUS,
+  GRENADE_RADIUS, GRENADE_SPEED, GRENADE_FUSE_MS,
   WeaponConfig, WEAPONS,
   Upgrade, StatBoostType,
 } from '../config/GameConfig';
@@ -41,6 +42,8 @@ export class GameScene extends Phaser.Scene {
   private ownedWeaponIds: Set<string> = new Set(['pistol']);
   /** Countdown until next shot can fire (ms) */
   private fireTimer = 0;
+  /** Accumulated fire-rate multiplier from OVERCLOCK upgrades */
+  private weaponFireRateMult = 1.0;
 
   private introText!: Phaser.GameObjects.Text;
 
@@ -56,6 +59,7 @@ export class GameScene extends Phaser.Scene {
     this.currentWeapon = WEAPONS[0];
     this.ownedWeaponIds = new Set(['pistol']);
     this.fireTimer = 0;
+    this.weaponFireRateMult = 1.0;
 
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -153,6 +157,18 @@ export class GameScene extends Phaser.Scene {
       case 'comboWindow':
         this.scoreMgr.extendComboWindow(1500);
         break;
+      case 'fireRateBoost':
+        this.weaponFireRateMult = Math.max(0.2, this.weaponFireRateMult * 0.8);
+        this.showStatusMessage('-20% FIRE DELAY', '#ff8844');
+        break;
+      case 'damageBoost':
+        p.weaponDamage += 8;
+        this.showStatusMessage('+8 DAMAGE', '#ff8844');
+        break;
+      case 'multiShot':
+        p.extraProjectiles += 1;
+        this.showStatusMessage('+1 PROJECTILE', '#ffff44');
+        break;
     }
   }
 
@@ -181,6 +197,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.player.update(delta);
+
+    // Auto-aim: update player indicator toward closest enemy
+    const autoTarget = this.getClosestEnemy();
+    if (autoTarget) {
+      this.player.updateIndicatorToTarget(autoTarget.x, autoTarget.y);
+    }
 
     const cfg = this.roundMgr.getRoundConfig();
 
@@ -240,13 +262,14 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
-    // Weapon auto-fire while left mouse button is held
+    // Auto-fire at the closest enemy (no mouse click required)
     if (this.fireTimer > 0) {
       this.fireTimer -= delta;
     }
-    if (this.input.activePointer.isDown && this.fireTimer <= 0) {
-      this.fireWeapon();
-      this.fireTimer = this.currentWeapon.fireRate;
+    const closestEnemy = this.getClosestEnemy();
+    if (closestEnemy && this.fireTimer <= 0) {
+      this.fireWeapon(closestEnemy.x, closestEnemy.y);
+      this.fireTimer = this.currentWeapon.fireRate * this.weaponFireRateMult;
     }
 
     // Update projectiles; check collision with enemies
@@ -255,10 +278,17 @@ export class GameScene extends Phaser.Scene {
       const proj = projectiles[pi];
       if (!proj.active) continue;
       if (proj.tickLifetime(delta)) {
+        // Area-damage projectile (grenade): explode at current position on fuse expiry
+        if (proj.isAreaDamage) {
+          this.triggerExplosion(proj.x, proj.y, proj.areaRadius, proj.damage, proj.effectType, proj.effectDuration);
+        }
         proj.destroy();
         this.projectiles.remove(proj, false, false);
         continue;
       }
+      // Area-damage projectiles only explode when their fuse expires, not on contact
+      if (proj.isAreaDamage) continue;
+
       // Check hit against each enemy
       for (let ei = enemies.length - 1; ei >= 0; ei--) {
         const enemy = enemies[ei];
@@ -267,6 +297,10 @@ export class GameScene extends Phaser.Scene {
         const dy = proj.y - enemy.y;
         if (Math.sqrt(dx * dx + dy * dy) < PROJECTILE_HIT_RADIUS) {
           const killed = enemy.takeDamage(proj.damage);
+          // Apply status effect (slow / disorient) if the weapon has one
+          if (proj.effectType && proj.effectDuration) {
+            enemy.applyEffect(proj.effectType, proj.effectDuration);
+          }
           proj.destroy();
           this.projectiles.remove(proj, false, false);
           if (killed) {
@@ -320,11 +354,12 @@ export class GameScene extends Phaser.Scene {
     this.updateHUD(cfg);
   }
 
-  private fireWeapon() {
-    const baseAngle = this.player.getAimAngle();
+  private fireWeapon(targetX: number, targetY: number) {
+    const baseAngle = Math.atan2(targetY - this.player.y, targetX - this.player.x);
     const wep = this.currentWeapon;
     const totalProjectiles = wep.projectileCount + this.player.extraProjectiles;
     const dmg = wep.damage + this.player.weaponDamage;
+    const projOptions = this.buildProjectileOptions(wep);
 
     for (let i = 0; i < totalProjectiles; i++) {
       let angle = baseAngle;
@@ -332,9 +367,107 @@ export class GameScene extends Phaser.Scene {
         const spreadStep = wep.spread / (totalProjectiles - 1);
         angle = baseAngle - wep.spread / 2 + i * spreadStep;
       }
-      const proj = new Projectile(this, this.player.x, this.player.y, angle, dmg);
+      const proj = new Projectile(this, this.player.x, this.player.y, angle, dmg, projOptions);
       this.projectiles.add(proj);
     }
+  }
+
+  /** Build the visual and behaviour options for a projectile based on its weapon config. */
+  private buildProjectileOptions(wep: WeaponConfig): ProjectileOptions {
+    if (wep.areaRadius) {
+      // Grenade: slow orange orb that explodes on fuse expiry
+      return {
+        speed: GRENADE_SPEED,
+        lifetime: GRENADE_FUSE_MS,
+        color: 0xff4400,
+        strokeColor: 0xffaa00,
+        visualRadius: 7,
+        isAreaDamage: true,
+        areaRadius: wep.areaRadius,
+        effectType: wep.effectType,
+        effectDuration: wep.effectDuration,
+      };
+    }
+    if (wep.effectType) {
+      // Status-effect weapon (EMP slow = blue, disorient = purple)
+      return {
+        color: wep.effectType === 'slow' ? 0x44aaff : 0xcc44ff,
+        strokeColor: wep.effectType === 'slow' ? 0x0044ff : 0xaa00ff,
+        visualRadius: 5,
+        effectType: wep.effectType,
+        effectDuration: wep.effectDuration,
+      };
+    }
+    // Standard weapon — default yellow bullet
+    return {};
+  }
+
+  /** Return the enemy closest to the player, or null if no enemies exist. */
+  private getClosestEnemy(): Enemy | null {
+    const enemies = this.enemies.getChildren() as Enemy[];
+    let closest: Enemy | null = null;
+    let minDist = Infinity;
+    for (const e of enemies) {
+      if (!e.active) continue;
+      const dx = e.x - this.player.x;
+      const dy = e.y - this.player.y;
+      const dist = dx * dx + dy * dy;
+      if (dist < minDist) {
+        minDist = dist;
+        closest = e;
+      }
+    }
+    return closest;
+  }
+
+  /**
+   * Trigger a grenade explosion: damage all enemies in radius, show visual.
+   */
+  private triggerExplosion(
+    x: number, y: number,
+    radius: number,
+    damage: number,
+    effectType?: 'slow' | 'disorient',
+    effectDuration?: number,
+  ) {
+    const radiusSq = radius * radius;
+    const enemies = this.enemies.getChildren() as Enemy[];
+    for (let ei = enemies.length - 1; ei >= 0; ei--) {
+      const enemy = enemies[ei];
+      if (!enemy.active) continue;
+      const dx = enemy.x - x;
+      const dy = enemy.y - y;
+      if (dx * dx + dy * dy <= radiusSq) {
+        const killed = enemy.takeDamage(damage);
+        if (effectType && effectDuration) {
+          enemy.applyEffect(effectType, effectDuration);
+        }
+        if (killed) {
+          this.scoreMgr.addMoney(enemy.moneyReward);
+          this.showFloatingMoney(enemy.x, enemy.y, enemy.moneyReward);
+          enemy.destroy();
+          this.enemies.remove(enemy, false, false);
+        }
+      }
+    }
+    this.showExplosion(x, y, radius);
+  }
+
+  /** Visual expanding ring for a grenade explosion. */
+  private showExplosion(x: number, y: number, radius: number) {
+    const ring = this.add.arc(x, y, radius, 0, 360, false, 0xff6600, 0.55);
+    ring.setStrokeStyle(3, 0xffcc00, 1);
+    ring.setDepth(20);
+    ring.setScale(0.05);
+    this.tweens.add({
+      targets: ring,
+      scaleX: 1,
+      scaleY: 1,
+      alpha: 0,
+      duration: 400,
+      ease: 'Cubic.easeOut',
+      onComplete: () => ring.destroy(),
+    });
   }
 
   private getUIScene(): UIScene | null {

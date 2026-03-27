@@ -141,6 +141,20 @@ export class Player extends Phaser.GameObjects.Container {
     return Math.atan2(this.facingY, this.facingX);
   }
 
+  /**
+   * Override the aim indicator to face a world-space target.
+   * Called by GameScene for auto-aim when a closest enemy is found.
+   */
+  updateIndicatorToTarget(worldX: number, worldY: number): void {
+    const dx = worldX - this.x;
+    const dy = worldY - this.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    this.facingX = dx / len;
+    this.facingY = dy / len;
+    const aimAngle = Math.atan2(this.facingY, this.facingX) + Math.PI / 2;
+    this.indicator.setRotation(aimAngle);
+  }
+
   takeDamage(amount: number): boolean {
     if (this.invincibleTimer > 0) return false;
     this.hp = Math.max(0, this.hp - amount);

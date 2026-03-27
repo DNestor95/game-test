@@ -5,6 +5,7 @@ import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
 import { UpgradeScene } from './scenes/UpgradeScene';
+import { LevelUpScene } from './scenes/LevelUpScene';
 import { GameOverScene } from './scenes/GameOverScene';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -17,7 +18,7 @@ const config: Phaser.Types.Core.GameConfig = {
     default: 'arcade',
     arcade: { debug: false, gravity: { x: 0, y: 0 } },
   },
-  scene: [BootScene, MenuScene, GameScene, UIScene, UpgradeScene, GameOverScene],
+  scene: [BootScene, MenuScene, GameScene, UIScene, UpgradeScene, LevelUpScene, GameOverScene],
 };
 
 new Phaser.Game(config);

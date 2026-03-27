@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { Player } from '../objects/Player';
 import { HackNode } from '../objects/HackNode';
 import { Enemy } from '../objects/Enemy';
+import { Obstacle } from '../objects/Obstacle';
 import { Projectile, ProjectileOptions } from '../objects/Projectile';
 import { RoundManager } from '../systems/RoundManager';
 import { ScoreManager } from '../systems/ScoreManager';
@@ -15,15 +16,28 @@ import {
   GRENADE_RADIUS, GRENADE_SPEED, GRENADE_FUSE_MS,
   WeaponConfig, WEAPONS,
   Upgrade, StatBoostType,
+  XP_PER_KILL, XP_PER_HACK, XP_PER_EXIT,
+  BASE_LEVEL_SEED, createSeededRNG,
 } from '../config/GameConfig';
 
 type RoundPhase = 'INTRO' | 'ACTIVE' | 'ROUND_RESULT' | 'GAME_OVER';
+
+/** Shape of data sent back to GameScene when any overlay scene resumes it. */
+interface ResumeData {
+  upgrade?: Upgrade;
+  newWeaponId?: string;
+  creditsSpent: number;
+  /** true → advance to next round; false → level-up mid-round, stay in current round */
+  nextRound: boolean;
+}
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
   private nodes: HackNode[] = [];
   private enemies!: Phaser.GameObjects.Group;
   private projectiles!: Phaser.GameObjects.Group;
+  private obstacles: Obstacle[] = [];
+  private obstacleGroup!: Phaser.Physics.Arcade.StaticGroup;
   private roundMgr!: RoundManager;
   private scoreMgr!: ScoreManager;
 
@@ -44,6 +58,11 @@ export class GameScene extends Phaser.Scene {
   private fireTimer = 0;
   /** Accumulated fire-rate multiplier from OVERCLOCK upgrades */
   private weaponFireRateMult = 1.0;
+  /** Accumulated hack-speed multiplier from FAST INJECT upgrades */
+  private hackSpeedMult = 1.0;
+
+  /** Prevent multiple level-up overlays stacking simultaneously */
+  private levelUpPending = false;
 
   private introText!: Phaser.GameObjects.Text;
 
@@ -60,17 +79,25 @@ export class GameScene extends Phaser.Scene {
     this.ownedWeaponIds = new Set(['pistol']);
     this.fireTimer = 0;
     this.weaponFireRateMult = 1.0;
+    this.hackSpeedMult = 1.0;
+    this.levelUpPending = false;
 
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
     this.drawBackground();
 
+    // Persistent static group for obstacle physics bodies
+    this.obstacleGroup = this.physics.add.staticGroup();
+
     this.player = new Player(this, WORLD_WIDTH / 2, WORLD_HEIGHT / 2);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
     this.enemies = this.add.group();
     this.projectiles = this.add.group();
+
+    // Persistent resume handler — handles both LevelUpScene and UpgradeScene returns
+    this.events.on('resume', this.onSceneResume, this);
 
     if (!this.scene.isActive('UIScene')) {
       this.scene.launch('UIScene');
@@ -112,6 +139,7 @@ export class GameScene extends Phaser.Scene {
     this.introCountdown = 3;
     this.enemySpawnTimer = 0;
     this.enemySpawnInterval = Math.max(1500, 4000 - this.roundMgr.round * 200);
+    this.levelUpPending = false;
 
     this.nodes.forEach(n => n.destroy());
     this.nodes = [];
@@ -120,26 +148,83 @@ export class GameScene extends Phaser.Scene {
     (this.projectiles.getChildren() as Projectile[]).forEach(p => p.destroy());
     this.projectiles.clear(false, false);
 
-    // Spawn regular nodes
-    const total = cfg.nodesRequired + 2;
-    for (let i = 0; i < total; i++) {
-      const nx = Phaser.Math.Between(100, WORLD_WIDTH - 100);
-      const ny = Phaser.Math.Between(100, WORLD_HEIGHT - 100);
-      this.nodes.push(new HackNode(this, nx, ny, false));
-    }
+    // Clear previous obstacles and generate new ones using a deterministic seed
+    this.obstacleGroup.clear(true, true);
+    this.obstacles = [];
 
-    // Spawn the EXIT node (stage completion target) — placed far from player spawn
-    const exitX = Phaser.Math.Between(100, WORLD_WIDTH - 100);
-    const exitY = Phaser.Math.Between(100, WORLD_HEIGHT - 100);
-    this.nodes.push(new HackNode(this, exitX, exitY, true));
+    // Seed grows with round count so later stages are more complex
+    const seed = BASE_LEVEL_SEED + this.roundMgr.round * 31337;
+    const rng = createSeededRNG(seed);
+
+    this.spawnObstacles(rng, cfg.round);
+    this.spawnNodes(rng, cfg);
+
+    // Add physics colliders for this round's obstacles
+    this.physics.add.collider(this.player, this.obstacleGroup);
+    this.physics.add.collider(this.enemies, this.obstacleGroup);
 
     this.introText.setText('3');
+  }
+
+  /**
+   * Procedurally place rectangular obstacles using the seeded RNG.
+   * Obstacle count and average size scale with the round number.
+   */
+  private spawnObstacles(rng: () => number, round: number) {
+    // Obstacles range from 3 in round 1 up to ~18 in round 10
+    const count = Math.min(18, Math.floor(3 + (round - 1) * 1.7));
+    const cx = WORLD_WIDTH / 2;
+    const cy = WORLD_HEIGHT / 2;
+
+    for (let i = 0; i < count; i++) {
+      // Width / height scale up gently with round number
+      const maxW = Math.min(220, 70 + round * 8);
+      const maxH = Math.min(140, 35 + round * 5);
+      const ow = Math.floor(rng() * (maxW - 50)) + 50;
+      const oh = Math.floor(rng() * (maxH - 25)) + 25;
+
+      let ox: number, oy: number;
+      let attempts = 0;
+      // Retry placement until the obstacle is far enough from the player spawn
+      do {
+        ox = Math.floor(rng() * (WORLD_WIDTH - 200)) + 100;
+        oy = Math.floor(rng() * (WORLD_HEIGHT - 200)) + 100;
+        attempts++;
+      } while (Math.sqrt((ox - cx) ** 2 + (oy - cy) ** 2) < 160 && attempts < 15);
+
+      const obs = new Obstacle(this, ox, oy, ow, oh);
+      this.obstacles.push(obs);
+      this.obstacleGroup.add(obs);
+    }
+  }
+
+  /**
+   * Procedurally place hack nodes using the seeded RNG (same seed as obstacles
+   * so the full layout is reproducible).
+   */
+  private spawnNodes(rng: () => number, cfg: ReturnType<RoundManager['getRoundConfig']>) {
+    const total = cfg.nodesRequired + 2;
+    for (let i = 0; i < total; i++) {
+      const nx = Math.floor(rng() * (WORLD_WIDTH - 200)) + 100;
+      const ny = Math.floor(rng() * (WORLD_HEIGHT - 200)) + 100;
+      const node = new HackNode(this, nx, ny, false);
+      if (this.hackSpeedMult < 1.0) node.hackTimeMs *= this.hackSpeedMult;
+      this.nodes.push(node);
+    }
+
+    // EXIT node
+    const exitX = Math.floor(rng() * (WORLD_WIDTH - 200)) + 100;
+    const exitY = Math.floor(rng() * (WORLD_HEIGHT - 200)) + 100;
+    const exitNode = new HackNode(this, exitX, exitY, true);
+    if (this.hackSpeedMult < 1.0) exitNode.hackTimeMs *= this.hackSpeedMult;
+    this.nodes.push(exitNode);
   }
 
   private applyUpgrade(upgrade: Upgrade) {
     const p = this.player;
     switch (upgrade.id) {
       case 'hackSpeed':
+        this.hackSpeedMult *= 0.6;
         this.nodes.forEach(n => { n.hackTimeMs *= 0.6; });
         break;
       case 'moveSpeed':
@@ -187,6 +272,31 @@ export class GameScene extends Phaser.Scene {
         p.extraProjectiles += value;
         this.showStatusMessage('+1 PROJECTILE', '#ffff44');
         break;
+    }
+  }
+
+  /**
+   * Persistent resume handler for both LevelUpScene (mid-round) and
+   * UpgradeScene (end-of-stage).  The `nextRound` flag distinguishes the two.
+   */
+  private onSceneResume(_scene: unknown, data: ResumeData) {
+    this.levelUpPending = false;
+
+    if (data?.upgrade) {
+      this.applyUpgrade(data.upgrade);
+    }
+    if (data?.newWeaponId) {
+      this.ownedWeaponIds.add(data.newWeaponId);
+      const wep = WEAPONS.find(w => w.id === data.newWeaponId);
+      if (wep) this.currentWeapon = wep;
+    }
+    if (data?.creditsSpent > 0) {
+      this.scoreMgr.spendCredits(data.creditsSpent);
+    }
+
+    if (data?.nextRound) {
+      this.roundMgr.nextRound();
+      this.startRound();
     }
   }
 
@@ -238,7 +348,7 @@ export class GameScene extends Phaser.Scene {
 
     this.enemySpawnTimer -= delta;
     if (this.enemySpawnTimer <= 0) {
-      this.spawnEnemy(cfg.enemySpeedMult, cfg.enemyCountMult);
+      this.spawnEnemy(cfg.enemySpeedMult, cfg.enemyCountMult, cfg.enemyHpMult);
       const interval = this.enemySpawnInterval / (1 + this.heat * 3);
       this.enemySpawnTimer = Math.max(600, interval);
     }
@@ -308,6 +418,8 @@ export class GameScene extends Phaser.Scene {
             this.showFloatingMoney(enemy.x, enemy.y, enemy.moneyReward);
             enemy.destroy();
             this.enemies.remove(enemy, false, false);
+            // Award XP for the kill and check for level up
+            this.awardXP(XP_PER_KILL);
           }
           break;
         }
@@ -334,9 +446,11 @@ export class GameScene extends Phaser.Scene {
           this.showFloatingScore(node.x, node.y, money);
           this.getUIScene()?.showMessage('STAGE COMPLETE!', '#ffcc00', 1500);
           this.phase = 'ROUND_RESULT';
+          // Award XP for exit node hack
+          this.scoreMgr.addXP(XP_PER_EXIT);
           this.time.delayedCall(800, () => this.showUpgradeScreen());
         } else {
-          // Regular node — money + stat boost + combo points
+          // Regular node — money + stat boost + combo points + XP
           this.roundMgr.hackNode();
           const pts = this.scoreMgr.addHackScore(this.time.now);
           const money = NODE_HACK_MONEY;
@@ -347,11 +461,25 @@ export class GameScene extends Phaser.Scene {
           if (node.statBoostType) {
             this.applyStatBoost(node.statBoostType, node.statBoostValue);
           }
+          // Award XP for hacking and check for level up
+          this.awardXP(XP_PER_HACK);
         }
       }
     });
 
     this.updateHUD(cfg);
+  }
+
+  /**
+   * Award XP to the player and trigger a level-up overlay if the threshold
+   * is reached.  Only one overlay is shown at a time.
+   */
+  private awardXP(amount: number) {
+    const leveled = this.scoreMgr.addXP(amount);
+    if (leveled && !this.levelUpPending && this.phase === 'ACTIVE') {
+      this.levelUpPending = true;
+      this.showLevelUpScreen();
+    }
   }
 
   private fireWeapon(targetX: number, targetY: number) {
@@ -447,6 +575,7 @@ export class GameScene extends Phaser.Scene {
           this.showFloatingMoney(enemy.x, enemy.y, enemy.moneyReward);
           enemy.destroy();
           this.enemies.remove(enemy, false, false);
+          this.awardXP(XP_PER_KILL);
         }
       }
     }
@@ -474,7 +603,7 @@ export class GameScene extends Phaser.Scene {
     return this.scene.get('UIScene') as UIScene | null;
   }
 
-  private spawnEnemy(speedMult: number, countMult: number) {
+  private spawnEnemy(speedMult: number, countMult: number, hpMult: number) {
     const maxEnemies = Math.floor(4 * countMult + this.heat * 8);
     const current = this.enemies.getLength();
     if (current >= maxEnemies) return;
@@ -483,10 +612,23 @@ export class GameScene extends Phaser.Scene {
     const dist = 420;
     const ex = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 50, WORLD_WIDTH - 50);
     const ey = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 50, WORLD_HEIGHT - 50);
-    const enemy = new Enemy(this, ex, ey, speedMult + this.heat * 0.5);
+    const enemy = new Enemy(this, ex, ey, speedMult + this.heat * 0.5, hpMult);
     this.enemies.add(enemy);
   }
 
+  /**
+   * Pause GameScene and show the XP level-up overlay (LevelUpScene).
+   * Only one can be active at a time.
+   */
+  private showLevelUpScreen() {
+    this.scene.pause('GameScene');
+    this.scene.launch('LevelUpScene', {
+      playerLevel: this.scoreMgr.playerLevel,
+      xpToNext: this.scoreMgr.xpToNext,
+    });
+  }
+
+  /** Pause GameScene and show the weapon shop (UpgradeScene) after stage completion. */
   private showUpgradeScreen() {
     const cfg = this.roundMgr.getRoundConfig();
     this.scene.pause('GameScene');
@@ -495,28 +637,6 @@ export class GameScene extends Phaser.Scene {
       score: this.scoreMgr.score,
       credits: this.scoreMgr.credits,
       ownedWeaponIds: Array.from(this.ownedWeaponIds),
-    });
-
-    this.events.once('resume', (_scene: unknown, data: {
-      upgrade?: Upgrade;
-      newWeaponId?: string;
-      creditsSpent: number;
-    }) => {
-      if (data?.upgrade) {
-        this.applyUpgrade(data.upgrade);
-      }
-      if (data?.newWeaponId) {
-        this.ownedWeaponIds.add(data.newWeaponId);
-        const wep = WEAPONS.find(w => w.id === data.newWeaponId);
-        if (wep) {
-          this.currentWeapon = wep;
-        }
-      }
-      if (data?.creditsSpent > 0) {
-        this.scoreMgr.spendCredits(data.creditsSpent);
-      }
-      this.roundMgr.nextRound();
-      this.startRound();
     });
   }
 
@@ -547,6 +667,9 @@ export class GameScene extends Phaser.Scene {
         dashCooldownFrac: this.player.dashCooldownRemaining / this.player.dashCooldownMs,
         weaponLabel: this.currentWeapon.label,
         exitHacked,
+        playerLevel: this.scoreMgr.playerLevel,
+        xp: this.scoreMgr.xp,
+        xpToNext: this.scoreMgr.xpToNext,
       });
     } catch {
       // UIScene may not be ready yet
@@ -591,4 +714,3 @@ export class GameScene extends Phaser.Scene {
     });
   }
 }
-

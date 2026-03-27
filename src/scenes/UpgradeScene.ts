@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, UPGRADES, WEAPONS, Upgrade } from '../config/GameConfig';
+import { GAME_WIDTH, GAME_HEIGHT, WEAPONS } from '../config/GameConfig';
 
 interface ShopData {
   round: number;
@@ -8,10 +8,15 @@ interface ShopData {
   ownedWeaponIds: string[];
 }
 
+/**
+ * Displayed after completing a stage (hacking the exit node).
+ * Shows the weapon shop so players can spend credits earned in the run.
+ * Free upgrades/augmentations are no longer awarded here — they come
+ * from the XP-based level-up system (LevelUpScene) instead.
+ */
 export class UpgradeScene extends Phaser.Scene {
   private credits = 0;
   private creditsSpent = 0;
-  private selectedUpgrade: Upgrade | null = null;
   private selectedWeaponId: string | null = null;
   private ownedWeaponIds: string[] = [];
   private creditsDisplay!: Phaser.GameObjects.Text;
@@ -23,7 +28,6 @@ export class UpgradeScene extends Phaser.Scene {
     this.data.set('score', data.score);
     this.credits = data.credits;
     this.creditsSpent = 0;
-    this.selectedUpgrade = null;
     this.selectedWeaponId = null;
     this.ownedWeaponIds = data.ownedWeaponIds ?? ['pistol'];
   }
@@ -45,64 +49,17 @@ export class UpgradeScene extends Phaser.Scene {
       fontSize: '20px', color: '#ffcc00', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    // Thin divider line
     const divG = this.add.graphics();
     divG.lineStyle(1, 0x224433, 1);
     divG.lineBetween(40, 84, GAME_WIDTH - 40, 84);
 
-    // ── FREE AUGMENT SECTION ──
-    this.add.text(cx, 98, '── FREE AUGMENT ──', {
-      fontSize: '15px', color: '#00ff88', fontFamily: 'Courier New',
+    // ── WEAPON SHOP SECTION ──
+    this.add.text(cx, 98, '── WEAPON SHOP ──', {
+      fontSize: '15px', color: '#ff8844', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    const pool = Phaser.Utils.Array.Shuffle([...UPGRADES]).slice(0, 3) as Upgrade[];
-    const upgradeCards: Phaser.GameObjects.Rectangle[] = [];
-
-    // Augment card geometry
-    const AUG_W = 196;
-    const AUG_H = 105;
-    const AUG_GAP = 18;
-    const AUG_Y = 160;
-    const augTotalW = 3 * AUG_W + 2 * AUG_GAP;
-    const augStartX = (GAME_WIDTH - augTotalW) / 2 + AUG_W / 2;
-
-    pool.forEach((upgrade, i) => {
-      const cardX = augStartX + i * (AUG_W + AUG_GAP);
-      const card = this.add.rectangle(cardX, AUG_Y, AUG_W, AUG_H, 0x001a11)
-        .setStrokeStyle(2, 0x00ff88)
-        .setInteractive({ useHandCursor: true });
-      upgradeCards.push(card);
-
-      this.add.text(cardX, AUG_Y - 28, upgrade.label, {
-        fontSize: '15px', color: '#00ffcc', fontFamily: 'Courier New',
-        align: 'center', wordWrap: { width: AUG_W - 14 },
-      }).setOrigin(0.5);
-
-      this.add.text(cardX, AUG_Y + 8, upgrade.desc, {
-        fontSize: '13px', color: '#aaaaaa', fontFamily: 'Courier New',
-        align: 'center', wordWrap: { width: AUG_W - 14 },
-      }).setOrigin(0.5);
-
-      this.add.text(cardX, AUG_Y + 33, `[press ${i + 1}]`, {
-        fontSize: '10px', color: '#336644', fontFamily: 'Courier New',
-      }).setOrigin(0.5);
-
-      const selectAug = () => {
-        this.selectedUpgrade = upgrade;
-        upgradeCards.forEach((c, j) => {
-          c.setStrokeStyle(j === i ? 3 : 2, j === i ? 0xffffff : 0x00ff88);
-        });
-      };
-      card.on('pointerover', () => { if (this.selectedUpgrade?.id !== upgrade.id) card.setStrokeStyle(3, 0x00ffff); });
-      card.on('pointerout', () => { if (this.selectedUpgrade?.id !== upgrade.id) card.setStrokeStyle(2, 0x00ff88); });
-      card.on('pointerdown', selectAug);
-      this.input.keyboard!.once(`keydown-${i + 1}`, selectAug);
-    });
-
-    // ── WEAPON SHOP SECTION ──
-    const WEAPON_HDR_Y = AUG_Y + AUG_H / 2 + 22;
-    this.add.text(cx, WEAPON_HDR_Y, '── WEAPON SHOP ──', {
-      fontSize: '15px', color: '#ff8844', fontFamily: 'Courier New',
+    this.add.text(cx, 116, 'Spend credits to arm up for the next stage', {
+      fontSize: '11px', color: '#556644', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
     const buyableWeapons = WEAPONS.filter(w => !this.ownedWeaponIds.includes(w.id));
@@ -114,7 +71,7 @@ export class UpgradeScene extends Phaser.Scene {
     const WEP_COLS = 3;
     const WEP_COL_GAP = 16;
     const WEP_ROW_GAP = 12;
-    const WEP_ROW1_Y = WEAPON_HDR_Y + 28 + WEP_H / 2;
+    const WEP_ROW1_Y = 134 + WEP_H / 2;
 
     buyableWeapons.forEach((wep, i) => {
       const row = Math.floor(i / WEP_COLS);
@@ -185,7 +142,6 @@ export class UpgradeScene extends Phaser.Scene {
     }
 
     // ── DEPLOY BUTTON ──
-    // Position below the weapon grid, clamped so it never runs off-screen
     const wepRows = Math.ceil(Math.max(buyableWeapons.length, 1) / WEP_COLS);
     const wepGridBottom = WEP_ROW1_Y + (wepRows - 1) * (WEP_H + WEP_ROW_GAP) + WEP_H / 2;
     const deployY = Math.min(wepGridBottom + 46, GAME_HEIGHT - 44);
@@ -202,7 +158,7 @@ export class UpgradeScene extends Phaser.Scene {
     this.input.keyboard!.once('keydown-ENTER', () => this.deploy());
     this.input.keyboard!.once('keydown-SPACE', () => this.deploy());
 
-    this.add.text(cx, GAME_HEIGHT - 12, 'SELECT AUGMENT (1-3)  •  CLICK WEAPON TO BUY  •  ENTER TO DEPLOY', {
+    this.add.text(cx, GAME_HEIGHT - 12, 'CLICK WEAPON TO BUY  •  ENTER TO DEPLOY  •  AUGMENTS FROM LEVEL-UPS', {
       fontSize: '10px', color: '#446655', fontFamily: 'Courier New',
     }).setOrigin(0.5);
   }
@@ -210,9 +166,10 @@ export class UpgradeScene extends Phaser.Scene {
   private deploy() {
     this.scene.stop('UpgradeScene');
     this.scene.resume('GameScene', {
-      upgrade: this.selectedUpgrade,
+      upgrade: null,
       newWeaponId: this.selectedWeaponId,
       creditsSpent: this.creditsSpent,
+      nextRound: true,
     });
   }
 }

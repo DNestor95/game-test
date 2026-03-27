@@ -1,4 +1,4 @@
-import { BASE_SCORE, HACK_COMBO_WINDOW_MS, BEST_SCORE_KEY } from '../config/GameConfig';
+import { BASE_SCORE, HACK_COMBO_WINDOW_MS, BEST_SCORE_KEY, XP_PER_LEVEL } from '../config/GameConfig';
 
 export class ScoreManager {
   private _score = 0;
@@ -11,6 +11,11 @@ export class ScoreManager {
   /** Spendable credits (earned from kills & hacks; reduced when purchasing items) */
   private _credits = 0;
 
+  /** Current XP within the active level (resets to 0 on level up) */
+  private _xp = 0;
+  /** Player level — increases via hacking nodes and killing enemies */
+  private _playerLevel = 1;
+
   constructor() {
     this._comboWindowMs = HACK_COMBO_WINDOW_MS;
     this._bestScore = parseInt(localStorage.getItem(BEST_SCORE_KEY) ?? '0', 10) || 0;
@@ -21,9 +26,28 @@ export class ScoreManager {
   get multiplier() { return this._multiplier; }
   get bestScore() { return this._bestScore; }
   get credits() { return this._credits; }
+  get xp() { return this._xp; }
+  get playerLevel() { return this._playerLevel; }
+  /** XP required to reach the next level */
+  get xpToNext() { return this._playerLevel * XP_PER_LEVEL; }
 
   addMultiplier(delta: number) { this._multiplier = Math.max(1, this._multiplier + delta); }
   extendComboWindow(ms: number) { this._comboWindowMs += ms; }
+
+  /**
+   * Award XP to the player (from kills and node hacks).
+   * @returns true if the player leveled up from this XP gain.
+   */
+  addXP(amount: number): boolean {
+    this._xp += amount;
+    const needed = this._playerLevel * XP_PER_LEVEL;
+    if (this._xp >= needed) {
+      this._xp -= needed; // carry over excess XP into the next level
+      this._playerLevel += 1;
+      return true;
+    }
+    return false;
+  }
 
   addHackScore(now: number): number {
     const withinWindow = (now - this._lastHackTime) < this._comboWindowMs;
@@ -73,6 +97,8 @@ export class ScoreManager {
     this._multiplier = 1;
     this._lastHackTime = 0;
     this._comboWindowMs = HACK_COMBO_WINDOW_MS;
+    this._xp = 0;
+    this._playerLevel = 1;
   }
 }
 

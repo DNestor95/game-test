@@ -6,7 +6,7 @@ import { RoundManager } from '../systems/RoundManager';
 import { ScoreManager } from '../systems/ScoreManager';
 import { UIScene } from './UIScene';
 import {
-  GAME_WIDTH, GAME_HEIGHT,
+  GAME_WIDTH,
   WORLD_WIDTH, WORLD_HEIGHT,
   HEAT_PER_HACK, HEAT_DAMAGE_SPIKE,
   Upgrade,
@@ -294,6 +294,3 @@ export class GameScene extends Phaser.Scene {
     });
   }
 }
-
-// Suppress unused import warning — GAME_HEIGHT used for potential future viewport clamping
-void GAME_HEIGHT;

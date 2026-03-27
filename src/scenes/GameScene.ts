@@ -6,7 +6,7 @@ import { RoundManager } from '../systems/RoundManager';
 import { ScoreManager } from '../systems/ScoreManager';
 import { UIScene } from './UIScene';
 import {
-  GAME_WIDTH,
+  GAME_WIDTH, GAME_HEIGHT,
   WORLD_WIDTH, WORLD_HEIGHT,
   HEAT_PER_HACK, HEAT_DAMAGE_SPIKE,
   Upgrade,

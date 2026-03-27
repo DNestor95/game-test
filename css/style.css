@@ -1,0 +1,47 @@
+/* ─── CRIME.EXE — Cyberpunk Dystopian RPG ──────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #07090f;
+  font-family: 'Courier New', Courier, monospace;
+  color: #00ff9f;
+}
+
+#gameCanvas {
+  display: block;
+  cursor: crosshair;
+  image-rendering: pixelated;
+}
+
+/* Loading screen (shown briefly before JS fires) */
+#loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #07090f;
+  color: #00ff9f;
+  font-size: 18px;
+  letter-spacing: 4px;
+  z-index: 10;
+  pointer-events: none;
+  animation: fadeOut 0.4s 0.6s forwards;
+}
+
+@keyframes fadeOut {
+  to { opacity: 0; visibility: hidden; }
+}
+
+/* Scrollbar (just in case) */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0a0e1a; }
+::-webkit-scrollbar-thumb { background: #1a3a5f; }

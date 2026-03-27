@@ -6,6 +6,8 @@ export interface RoundConfig {
   timerSec: number;
   enemySpeedMult: number;
   enemyCountMult: number;
+  /** Enemy max HP multiplier — increases 30% per round */
+  enemyHpMult: number;
 }
 
 export class RoundManager {
@@ -23,6 +25,7 @@ export class RoundManager {
       timerSec: Math.max(15, ROUND_BASE_TIMER_S - (r - 1) * 2),
       enemySpeedMult: 1 + (r - 1) * 0.15,
       enemyCountMult: 1 + (r - 1) * 0.25,
+      enemyHpMult: 1 + (r - 1) * 0.3,
     };
   }
 

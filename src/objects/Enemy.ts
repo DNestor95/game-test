@@ -20,11 +20,11 @@ export class Enemy extends Phaser.GameObjects.Container {
   private disorientVx = 0;
   private disorientVy = 0;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, speedMult = 1) {
+  constructor(scene: Phaser.Scene, x: number, y: number, speedMult = 1, hpMult = 1) {
     super(scene, x, y);
     this.speed = ENEMY_BASE_SPEED * speedMult;
-    this.hp = ENEMY_HP;
-    this.maxHp = ENEMY_HP;
+    this.hp = Math.round(ENEMY_HP * hpMult);
+    this.maxHp = this.hp;
     this.build();
     scene.add.existing(this);
     scene.physics.add.existing(this);

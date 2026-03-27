@@ -42,6 +42,32 @@ export const SLOW_SPEED_MULT = 0.35;
 export const ROUND_BASE_TIMER_S = 35;
 export const ROUND_BASE_NODES = 4;
 
+/** XP awarded for killing an enemy */
+export const XP_PER_KILL = 15;
+/** XP awarded for hacking a regular node */
+export const XP_PER_HACK = 50;
+/** XP awarded for hacking the exit node */
+export const XP_PER_EXIT = 100;
+/** XP needed per level (flat per level — resets each time) */
+export const XP_PER_LEVEL = 200;
+
+/** Base seed constant for procedural level generation */
+export const BASE_LEVEL_SEED = 0xDEAD;
+
+/**
+ * Create a deterministic pseudo-random number generator (Mulberry32).
+ * The seed determines the full sequence, making levels reproducible.
+ */
+export function createSeededRNG(seed: number): () => number {
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export type StatBoostType = 'speed' | 'damage' | 'projectile';
 
 export const STAT_BOOST_VALUES: Record<StatBoostType, number> = {
@@ -68,7 +94,7 @@ export interface WeaponConfig {
 }
 
 export const WEAPONS: WeaponConfig[] = [
-  { id: 'pistol',   label: '🔫 PISTOL',   desc: 'Balanced auto-fire',           cost: 0,   fireRate: 400,  damage: 10, projectileCount: 1, spread: 0    },
+  { id: 'pistol',   label: '🔫 PISTOL',   desc: 'Balanced auto-fire',           cost: 0,   fireRate: 400,  damage: 5,  projectileCount: 1, spread: 0    },
   { id: 'smg',      label: '⚡ SMG',       desc: 'Rapid fire, lower damage',     cost: 150, fireRate: 130,  damage: 7,  projectileCount: 1, spread: 0.05 },
   { id: 'shotgun',  label: '💥 SHOTGUN',  desc: '3-shot burst, slow reload',     cost: 300, fireRate: 750,  damage: 18, projectileCount: 3, spread: 0.3  },
   { id: 'sniper',   label: '🎯 SNIPER',   desc: 'High damage, slow fire',        cost: 500, fireRate: 1400, damage: 45, projectileCount: 1, spread: 0    },

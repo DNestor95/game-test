@@ -8,11 +8,13 @@ export class UIScene extends Phaser.Scene {
   private timerText!: Phaser.GameObjects.Text;
   private hpBar!: Phaser.GameObjects.Graphics;
   private heatBar!: Phaser.GameObjects.Graphics;
+  private xpBar!: Phaser.GameObjects.Graphics;
   private comboText!: Phaser.GameObjects.Text;
   private nodesText!: Phaser.GameObjects.Text;
   private dashText!: Phaser.GameObjects.Text;
   private weaponText!: Phaser.GameObjects.Text;
   private exitText!: Phaser.GameObjects.Text;
+  private levelText!: Phaser.GameObjects.Text;
 
   constructor() { super({ key: 'UIScene' }); }
 
@@ -71,6 +73,12 @@ export class UIScene extends Phaser.Scene {
     this.exitText = this.add.text(GAME_WIDTH - 10, 556, '', {
       fontSize: '11px', color: '#ffcc00', fontFamily: 'Courier New',
     }).setOrigin(1, 0);
+
+    // XP bar (just above the bottom bar) — label "LVL" + level number on the right side
+    this.levelText = this.add.text(GAME_WIDTH - 10, 554, 'LVL 1', {
+      fontSize: '11px', color: '#00aaff', fontFamily: 'Courier New',
+    }).setOrigin(1, 1);
+    this.xpBar = this.add.graphics();
   }
 
   updateHUD(data: {
@@ -86,6 +94,9 @@ export class UIScene extends Phaser.Scene {
     dashCooldownFrac: number;
     weaponLabel: string;
     exitHacked: boolean;
+    playerLevel: number;
+    xp: number;
+    xpToNext: number;
   }) {
     this.scoreText.setText(`SCORE: ${data.score}`);
     this.creditsText.setText(`¥ ${data.credits}`);
@@ -134,6 +145,17 @@ export class UIScene extends Phaser.Scene {
     } else {
       this.exitText.setText('[EXIT NODE: FIND IT]');
     }
+
+    // XP bar — drawn just above the bottom bar (y ≈ 552)
+    this.xpBar.clear();
+    const xpFrac = data.xpToNext > 0 ? Math.min(1, data.xp / data.xpToNext) : 0;
+    const XP_X = 390;
+    const XP_W = 180;
+    this.xpBar.fillStyle(0x222244);
+    this.xpBar.fillRect(XP_X, 553, XP_W, 8);
+    this.xpBar.fillStyle(0x0088ff);
+    this.xpBar.fillRect(XP_X, 553, Math.floor(XP_W * xpFrac), 8);
+    this.levelText.setText(`LVL ${data.playerLevel}`);
   }
 
   showMessage(text: string, color = '#ffffff', duration = 2000) {

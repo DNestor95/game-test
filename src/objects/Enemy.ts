@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ENEMY_BASE_SPEED, ENEMY_DAMAGE, ENEMY_HIT_COOLDOWN } from '../config/GameConfig';
+import { ENEMY_BASE_SPEED, ENEMY_DAMAGE, ENEMY_HIT_COOLDOWN, ENEMY_HP, ENEMY_KILL_MONEY } from '../config/GameConfig';
 
 export class Enemy extends Phaser.GameObjects.Container {
   private body_!: Phaser.Physics.Arcade.Body;
@@ -8,9 +8,15 @@ export class Enemy extends Phaser.GameObjects.Container {
   speed: number;
   private hitCooldown = 0;
 
+  hp: number;
+  maxHp: number;
+  readonly moneyReward = ENEMY_KILL_MONEY;
+
   constructor(scene: Phaser.Scene, x: number, y: number, speedMult = 1) {
     super(scene, x, y);
     this.speed = ENEMY_BASE_SPEED * speedMult;
+    this.hp = ENEMY_HP;
+    this.maxHp = ENEMY_HP;
     this.build();
     scene.add.existing(this);
     scene.physics.add.existing(this);
@@ -42,5 +48,21 @@ export class Enemy extends Phaser.GameObjects.Container {
     this.hitCooldown = ENEMY_HIT_COOLDOWN;
   }
 
+  /**
+   * Deal damage to this enemy.
+   * @returns true if the enemy dies from this hit
+   */
+  takeDamage(amount: number): boolean {
+    this.hp = Math.max(0, this.hp - amount);
+    if (this.hp <= 0) return true;
+    // Flash red on hit
+    this.core.setFillStyle(0xff4400);
+    this.scene.time.delayedCall(120, () => {
+      if (this.active) this.core.setFillStyle(0x220000);
+    });
+    return false;
+  }
+
   get damage() { return ENEMY_DAMAGE; }
 }
+

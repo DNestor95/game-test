@@ -24,9 +24,44 @@ export const HEAT_DAMAGE_SPIKE = 0.12;
 export const ENEMY_BASE_SPEED = 75;
 export const ENEMY_DAMAGE = 20;
 export const ENEMY_HIT_COOLDOWN = 800;
+export const ENEMY_HP = 30;
+export const ENEMY_KILL_MONEY = 30;
+
+export const NODE_HACK_MONEY = 250;
+export const FINAL_NODE_MONEY = 500;
+
+export const PROJECTILE_SPEED = 650;
+export const PROJECTILE_LIFETIME = 1800;
+export const PROJECTILE_HIT_RADIUS = 20;
 
 export const ROUND_BASE_TIMER_S = 35;
 export const ROUND_BASE_NODES = 4;
+
+export type StatBoostType = 'speed' | 'damage' | 'projectile';
+
+export const STAT_BOOST_VALUES: Record<StatBoostType, number> = {
+  speed: 15,
+  damage: 5,
+  projectile: 1,
+};
+
+export interface WeaponConfig {
+  id: string;
+  label: string;
+  desc: string;
+  cost: number;
+  fireRate: number;
+  damage: number;
+  projectileCount: number;
+  spread: number;
+}
+
+export const WEAPONS: WeaponConfig[] = [
+  { id: 'pistol',  label: '🔫 PISTOL',   desc: 'Balanced auto-fire',         cost: 0,   fireRate: 400,  damage: 10, projectileCount: 1, spread: 0    },
+  { id: 'smg',     label: '⚡ SMG',       desc: 'Rapid fire, lower damage',   cost: 150, fireRate: 130,  damage: 7,  projectileCount: 1, spread: 0.05 },
+  { id: 'shotgun', label: '💥 SHOTGUN',  desc: '3-shot burst, slow reload',   cost: 300, fireRate: 750,  damage: 18, projectileCount: 3, spread: 0.3  },
+  { id: 'sniper',  label: '🎯 SNIPER',   desc: 'High damage, slow fire',      cost: 500, fireRate: 1400, damage: 45, projectileCount: 1, spread: 0    },
+];
 
 export const UPGRADES: Upgrade[] = [
   { id: 'hackSpeed',       label: '⚡ FAST INJECT',  desc: '+40% hack speed'         },

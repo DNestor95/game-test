@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { Player } from '../objects/Player';
 import { HackNode } from '../objects/HackNode';
 import { Enemy } from '../objects/Enemy';
+import { Projectile } from '../objects/Projectile';
 import { RoundManager } from '../systems/RoundManager';
 import { ScoreManager } from '../systems/ScoreManager';
 import { UIScene } from './UIScene';
@@ -9,7 +10,10 @@ import {
   GAME_WIDTH, GAME_HEIGHT,
   WORLD_WIDTH, WORLD_HEIGHT,
   HEAT_PER_HACK, HEAT_DAMAGE_SPIKE,
-  Upgrade,
+  FINAL_NODE_MONEY, NODE_HACK_MONEY,
+  PROJECTILE_HIT_RADIUS,
+  WeaponConfig, WEAPONS,
+  Upgrade, StatBoostType,
 } from '../config/GameConfig';
 
 type RoundPhase = 'INTRO' | 'ACTIVE' | 'ROUND_RESULT' | 'GAME_OVER';
@@ -18,6 +22,7 @@ export class GameScene extends Phaser.Scene {
   private player!: Player;
   private nodes: HackNode[] = [];
   private enemies!: Phaser.GameObjects.Group;
+  private projectiles!: Phaser.GameObjects.Group;
   private roundMgr!: RoundManager;
   private scoreMgr!: ScoreManager;
 
@@ -30,6 +35,13 @@ export class GameScene extends Phaser.Scene {
   private enemySpawnTimer = 0;
   private enemySpawnInterval = 4000;
 
+  /** Currently equipped weapon config */
+  private currentWeapon: WeaponConfig = WEAPONS[0];
+  /** Weapon IDs the player owns (can equip) */
+  private ownedWeaponIds: Set<string> = new Set(['pistol']);
+  /** Countdown until next shot can fire (ms) */
+  private fireTimer = 0;
+
   private introText!: Phaser.GameObjects.Text;
 
   constructor() { super({ key: 'GameScene' }); }
@@ -41,6 +53,9 @@ export class GameScene extends Phaser.Scene {
     this.phase = 'INTRO';
     this.introTimer = 1000;
     this.introCountdown = 3;
+    this.currentWeapon = WEAPONS[0];
+    this.ownedWeaponIds = new Set(['pistol']);
+    this.fireTimer = 0;
 
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -51,6 +66,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
     this.enemies = this.add.group();
+    this.projectiles = this.add.group();
 
     if (!this.scene.isActive('UIScene')) {
       this.scene.launch('UIScene');
@@ -96,13 +112,22 @@ export class GameScene extends Phaser.Scene {
     this.nodes.forEach(n => n.destroy());
     this.nodes = [];
     this.enemies.clear(true, true);
+    // Destroy any lingering projectiles
+    (this.projectiles.getChildren() as Projectile[]).forEach(p => p.destroy());
+    this.projectiles.clear(false, false);
 
+    // Spawn regular nodes
     const total = cfg.nodesRequired + 2;
     for (let i = 0; i < total; i++) {
       const nx = Phaser.Math.Between(100, WORLD_WIDTH - 100);
       const ny = Phaser.Math.Between(100, WORLD_HEIGHT - 100);
-      this.nodes.push(new HackNode(this, nx, ny));
+      this.nodes.push(new HackNode(this, nx, ny, false));
     }
+
+    // Spawn the EXIT node (stage completion target) — placed far from player spawn
+    const exitX = Phaser.Math.Between(100, WORLD_WIDTH - 100);
+    const exitY = Phaser.Math.Between(100, WORLD_HEIGHT - 100);
+    this.nodes.push(new HackNode(this, exitX, exitY, true));
 
     this.introText.setText('3');
   }
@@ -114,7 +139,7 @@ export class GameScene extends Phaser.Scene {
         this.nodes.forEach(n => { n.hackTimeMs *= 0.6; });
         break;
       case 'moveSpeed':
-        // speed boost applied via player base speed — no direct mutable field in this impl
+        p.moveSpeed += 35; // Upgrade bonus is larger than the node stat boost (15) intentionally
         break;
       case 'dashCooldown':
         p.dashCooldownMs = p.dashCooldownMs * 0.65;
@@ -127,6 +152,24 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'comboWindow':
         this.scoreMgr.extendComboWindow(1500);
+        break;
+    }
+  }
+
+  private applyStatBoost(boostType: StatBoostType, value: number) {
+    const p = this.player;
+    switch (boostType) {
+      case 'speed':
+        p.moveSpeed += value;
+        this.showStatusMessage(`+${value} SPEED`, '#00ffcc');
+        break;
+      case 'damage':
+        p.weaponDamage += value;
+        this.showStatusMessage(`+${value} DAMAGE`, '#ff8844');
+        break;
+      case 'projectile':
+        p.extraProjectiles += value;
+        this.showStatusMessage('+1 PROJECTILE', '#ffff44');
         break;
     }
   }
@@ -178,6 +221,7 @@ export class GameScene extends Phaser.Scene {
       this.enemySpawnTimer = Math.max(600, interval);
     }
 
+    // Enemy movement and collision with player
     const enemies = this.enemies.getChildren() as Enemy[];
     enemies.forEach(e => {
       e.update(delta, this.player.x, this.player.y);
@@ -196,6 +240,47 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
+    // Weapon auto-fire while left mouse button is held
+    if (this.fireTimer > 0) {
+      this.fireTimer -= delta;
+    }
+    if (this.input.activePointer.isDown && this.fireTimer <= 0) {
+      this.fireWeapon();
+      this.fireTimer = this.currentWeapon.fireRate;
+    }
+
+    // Update projectiles; check collision with enemies
+    const projectiles = this.projectiles.getChildren() as Projectile[];
+    for (let pi = projectiles.length - 1; pi >= 0; pi--) {
+      const proj = projectiles[pi];
+      if (!proj.active) continue;
+      if (proj.tickLifetime(delta)) {
+        proj.destroy();
+        this.projectiles.remove(proj, false, false);
+        continue;
+      }
+      // Check hit against each enemy
+      for (let ei = enemies.length - 1; ei >= 0; ei--) {
+        const enemy = enemies[ei];
+        if (!enemy.active) continue;
+        const dx = proj.x - enemy.x;
+        const dy = proj.y - enemy.y;
+        if (Math.sqrt(dx * dx + dy * dy) < PROJECTILE_HIT_RADIUS) {
+          const killed = enemy.takeDamage(proj.damage);
+          proj.destroy();
+          this.projectiles.remove(proj, false, false);
+          if (killed) {
+            this.scoreMgr.addMoney(enemy.moneyReward);
+            this.showFloatingMoney(enemy.x, enemy.y, enemy.moneyReward);
+            enemy.destroy();
+            this.enemies.remove(enemy, false, false);
+          }
+          break;
+        }
+      }
+    }
+
+    // Node hacking
     this.nodes.forEach(node => {
       if (!node.hacked) {
         const inRange = node.isPlayerInRange(this.player.x, this.player.y);
@@ -203,23 +288,53 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
+    // Detect newly hacked nodes
     this.nodes.forEach(node => {
       if (node.hacked && node.hackProgress >= 1 && node.hackProgress < 1.1) {
-        node.hackProgress = 1.1;
-        this.roundMgr.hackNode();
-        const pts = this.scoreMgr.addHackScore(this.time.now);
-        this.heat = Math.min(1, this.heat + HEAT_PER_HACK);
-        this.showFloatingScore(node.x, node.y, pts);
+        node.hackProgress = 1.1; // mark as processed
+
+        if (node.isFinalNode) {
+          // Exit node — give large money reward and complete the round
+          const money = FINAL_NODE_MONEY;
+          this.scoreMgr.addMoney(money);
+          this.showFloatingScore(node.x, node.y, money);
+          this.getUIScene()?.showMessage('STAGE COMPLETE!', '#ffcc00', 1500);
+          this.phase = 'ROUND_RESULT';
+          this.time.delayedCall(800, () => this.showUpgradeScreen());
+        } else {
+          // Regular node — money + stat boost + combo points
+          this.roundMgr.hackNode();
+          const pts = this.scoreMgr.addHackScore(this.time.now);
+          const money = NODE_HACK_MONEY;
+          this.scoreMgr.addMoney(money);
+          this.heat = Math.min(1, this.heat + HEAT_PER_HACK);
+          this.showFloatingScore(node.x, node.y, pts + money);
+          // Apply the stat boost this node provides
+          if (node.statBoostType) {
+            this.applyStatBoost(node.statBoostType, node.statBoostValue);
+          }
+        }
       }
     });
 
-    if (this.roundMgr.isRoundComplete(cfg)) {
-      this.phase = 'ROUND_RESULT';
-      this.showUpgradeScreen();
-      return;
-    }
-
     this.updateHUD(cfg);
+  }
+
+  private fireWeapon() {
+    const baseAngle = this.player.getAimAngle();
+    const wep = this.currentWeapon;
+    const totalProjectiles = wep.projectileCount + this.player.extraProjectiles;
+    const dmg = wep.damage + this.player.weaponDamage;
+
+    for (let i = 0; i < totalProjectiles; i++) {
+      let angle = baseAngle;
+      if (totalProjectiles > 1) {
+        const spreadStep = wep.spread / (totalProjectiles - 1);
+        angle = baseAngle - wep.spread / 2 + i * spreadStep;
+      }
+      const proj = new Projectile(this, this.player.x, this.player.y, angle, dmg);
+      this.projectiles.add(proj);
+    }
   }
 
   private getUIScene(): UIScene | null {
@@ -242,11 +357,30 @@ export class GameScene extends Phaser.Scene {
   private showUpgradeScreen() {
     const cfg = this.roundMgr.getRoundConfig();
     this.scene.pause('GameScene');
-    this.scene.launch('UpgradeScene', { round: cfg.round, score: this.scoreMgr.score });
+    this.scene.launch('UpgradeScene', {
+      round: cfg.round,
+      score: this.scoreMgr.score,
+      credits: this.scoreMgr.credits,
+      ownedWeaponIds: Array.from(this.ownedWeaponIds),
+    });
 
-    this.events.once('resume', (_scene: unknown, data: { upgrade?: Upgrade }) => {
+    this.events.once('resume', (_scene: unknown, data: {
+      upgrade?: Upgrade;
+      newWeaponId?: string;
+      creditsSpent: number;
+    }) => {
       if (data?.upgrade) {
         this.applyUpgrade(data.upgrade);
+      }
+      if (data?.newWeaponId) {
+        this.ownedWeaponIds.add(data.newWeaponId);
+        const wep = WEAPONS.find(w => w.id === data.newWeaponId);
+        if (wep) {
+          this.currentWeapon = wep;
+        }
+      }
+      if (data?.creditsSpent > 0) {
+        this.scoreMgr.spendCredits(data.creditsSpent);
       }
       this.roundMgr.nextRound();
       this.startRound();
@@ -265,17 +399,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateHUD(cfg: ReturnType<RoundManager['getRoundConfig']>) {
+    const exitHacked = this.nodes.some(n => n.isFinalNode && n.hacked);
     try {
       this.getUIScene()?.updateHUD({
         score: this.scoreMgr.score,
+        credits: this.scoreMgr.credits,
         round: this.roundMgr.round,
         timerSec: this.roundTimerMs / 1000,
         hp: this.player.hp,
         heat: this.heat,
         combo: this.scoreMgr.combo,
         nodesHacked: this.roundMgr.nodesHacked,
-        nodesRequired: cfg.nodesRequired,
+        nodesTotal: cfg.nodesRequired + 2,
         dashCooldownFrac: this.player.dashCooldownRemaining / this.player.dashCooldownMs,
+        weaponLabel: this.currentWeapon.label,
+        exitHacked,
       });
     } catch {
       // UIScene may not be ready yet
@@ -293,4 +431,31 @@ export class GameScene extends Phaser.Scene {
       onComplete: () => t.destroy(),
     });
   }
+
+  private showFloatingMoney(x: number, y: number, amount: number) {
+    const t = this.add.text(x, y - 20, `+¥${amount}`, {
+      fontSize: '14px', color: '#ffcc00', fontFamily: 'Courier New',
+      stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(50);
+    this.tweens.add({
+      targets: t, y: y - 60, alpha: 0, duration: 900,
+      ease: 'Cubic.easeOut',
+      onComplete: () => t.destroy(),
+    });
+  }
+
+  private showStatusMessage(text: string, color: string) {
+    const t = this.add.text(
+      this.player.x,
+      this.player.y - 40,
+      text,
+      { fontSize: '13px', color, fontFamily: 'Courier New', stroke: '#000', strokeThickness: 2 },
+    ).setOrigin(0.5).setDepth(50);
+    this.tweens.add({
+      targets: t, y: this.player.y - 80, alpha: 0, duration: 1000,
+      ease: 'Cubic.easeOut',
+      onComplete: () => t.destroy(),
+    });
+  }
 }
+

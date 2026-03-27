@@ -13,6 +13,7 @@ export class UIScene extends Phaser.Scene {
   private nodesText!: Phaser.GameObjects.Text;
   private dashText!: Phaser.GameObjects.Text;
   private weaponText!: Phaser.GameObjects.Text;
+  private magText!: Phaser.GameObjects.Text;
   private exitText!: Phaser.GameObjects.Text;
   private levelText!: Phaser.GameObjects.Text;
 
@@ -69,6 +70,11 @@ export class UIScene extends Phaser.Scene {
       fontSize: '10px', color: '#aaaaaa', fontFamily: 'Courier New',
     });
 
+    // Magazine / reload status (next to weapon label)
+    this.magText = this.add.text(120, 590, '', {
+      fontSize: '10px', color: '#88ccff', fontFamily: 'Courier New',
+    });
+
     // Exit node status indicator
     this.exitText = this.add.text(GAME_WIDTH - 10, 556, '', {
       fontSize: '11px', color: '#ffcc00', fontFamily: 'Courier New',
@@ -97,6 +103,10 @@ export class UIScene extends Phaser.Scene {
     playerLevel: number;
     xp: number;
     xpToNext: number;
+    magazineRemaining: number;
+    magazineSize: number;
+    isReloading: boolean;
+    reloadFrac: number;
   }) {
     this.scoreText.setText(`SCORE: ${data.score}`);
     this.creditsText.setText(`¥ ${data.credits}`);
@@ -139,6 +149,16 @@ export class UIScene extends Phaser.Scene {
     }
 
     this.weaponText.setText(data.weaponLabel);
+
+    if (data.isReloading) {
+      const pct = Math.ceil(data.reloadFrac * 100);
+      this.magText.setText(`RELOAD ${pct}%`);
+      this.magText.setColor('#ff8844');
+    } else {
+      const low = data.magazineRemaining <= Math.ceil(data.magazineSize * 0.25);
+      this.magText.setText(`MAG: ${data.magazineRemaining}/${data.magazineSize}`);
+      this.magText.setColor(low ? '#ff4444' : '#88ccff');
+    }
 
     if (data.exitHacked) {
       this.exitText.setText('');

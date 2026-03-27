@@ -60,6 +60,12 @@ export class GameScene extends Phaser.Scene {
   private weaponFireRateMult = 1.0;
   /** Accumulated hack-speed multiplier from FAST INJECT upgrades */
   private hackSpeedMult = 1.0;
+  /** Shots remaining in the current magazine before a reload is required */
+  private magazineShotsRemaining = 0;
+  /** Countdown for the current reload cooldown (ms); 0 = not reloading */
+  private reloadTimer = 0;
+  /** Accumulated reload-time multiplier from QUICK RELOAD upgrades */
+  private reloadTimeMult = 1.0;
 
   /** Prevent multiple level-up overlays stacking simultaneously */
   private levelUpPending = false;
@@ -81,6 +87,9 @@ export class GameScene extends Phaser.Scene {
     this.weaponFireRateMult = 1.0;
     this.hackSpeedMult = 1.0;
     this.levelUpPending = false;
+    this.magazineShotsRemaining = WEAPONS[0].magazineSize;
+    this.reloadTimer = 0;
+    this.reloadTimeMult = 1.0;
 
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -140,6 +149,8 @@ export class GameScene extends Phaser.Scene {
     this.enemySpawnTimer = 0;
     this.enemySpawnInterval = Math.max(1500, 4000 - this.roundMgr.round * 200);
     this.levelUpPending = false;
+    this.magazineShotsRemaining = this.currentWeapon.magazineSize;
+    this.reloadTimer = 0;
 
     this.nodes.forEach(n => n.destroy());
     this.nodes = [];
@@ -254,6 +265,10 @@ export class GameScene extends Phaser.Scene {
         p.extraProjectiles += 1;
         this.showStatusMessage('+1 PROJECTILE', '#ffff44');
         break;
+      case 'reloadSpeed':
+        this.reloadTimeMult = Math.max(0.25, this.reloadTimeMult * 0.75);
+        this.showStatusMessage('-25% RELOAD TIME', '#44ffcc');
+        break;
     }
   }
 
@@ -288,7 +303,12 @@ export class GameScene extends Phaser.Scene {
     if (data?.newWeaponId) {
       this.ownedWeaponIds.add(data.newWeaponId);
       const wep = WEAPONS.find(w => w.id === data.newWeaponId);
-      if (wep) this.currentWeapon = wep;
+      if (wep) {
+        this.currentWeapon = wep;
+        // Reset magazine for newly equipped weapon
+        this.magazineShotsRemaining = wep.magazineSize;
+        this.reloadTimer = 0;
+      }
     }
     if (data?.creditsSpent > 0) {
       this.scoreMgr.spendCredits(data.creditsSpent);
@@ -373,13 +393,26 @@ export class GameScene extends Phaser.Scene {
     });
 
     // Auto-fire at the closest enemy (no mouse click required)
+    if (this.reloadTimer > 0) {
+      this.reloadTimer -= delta;
+      if (this.reloadTimer <= 0) {
+        // Reload complete — refill magazine
+        this.magazineShotsRemaining = this.currentWeapon.magazineSize;
+        this.getUIScene()?.showMessage('RELOADED!', '#00ffcc', 600);
+      }
+    }
     if (this.fireTimer > 0) {
       this.fireTimer -= delta;
     }
     const closestEnemy = this.getClosestEnemy();
-    if (closestEnemy && this.fireTimer <= 0) {
+    if (closestEnemy && this.fireTimer <= 0 && this.reloadTimer <= 0 && this.magazineShotsRemaining > 0) {
       this.fireWeapon(closestEnemy.x, closestEnemy.y);
       this.fireTimer = this.currentWeapon.fireRate * this.weaponFireRateMult;
+      this.magazineShotsRemaining -= 1;
+      if (this.magazineShotsRemaining <= 0) {
+        // Magazine empty — begin reload cooldown
+        this.reloadTimer = this.currentWeapon.reloadTime * this.reloadTimeMult;
+      }
     }
 
     // Update projectiles; check collision with enemies
@@ -670,6 +703,12 @@ export class GameScene extends Phaser.Scene {
         playerLevel: this.scoreMgr.playerLevel,
         xp: this.scoreMgr.xp,
         xpToNext: this.scoreMgr.xpToNext,
+        magazineRemaining: this.magazineShotsRemaining,
+        magazineSize: this.currentWeapon.magazineSize,
+        isReloading: this.reloadTimer > 0,
+        reloadFrac: this.reloadTimer > 0
+          ? 1 - this.reloadTimer / (this.currentWeapon.reloadTime * this.reloadTimeMult)
+          : 0,
       });
     } catch {
       // UIScene may not be ready yet

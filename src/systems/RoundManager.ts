@@ -23,9 +23,9 @@ export class RoundManager {
       round: r,
       nodesRequired: ROUND_BASE_NODES + Math.floor((r - 1) * 1.5),
       timerSec: Math.max(15, ROUND_BASE_TIMER_S - (r - 1) * 2),
-      enemySpeedMult: 1 + (r - 1) * 0.15,
-      enemyCountMult: 1 + (r - 1) * 0.25,
-      enemyHpMult: 1 + (r - 1) * 0.3,
+      enemySpeedMult: 1 + (r - 1) * 0.20,
+      enemyCountMult: 1 + (r - 1) * 0.35,
+      enemyHpMult: 1 + (r - 1) * 0.40,
     };
   }
 

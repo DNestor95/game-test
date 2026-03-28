@@ -76,7 +76,10 @@ export const XP_PER_HACK = 50;
 /** XP awarded for hacking the exit node */
 export const XP_PER_EXIT = 100;
 /** XP needed per level (flat per level — resets each time) */
-export const XP_PER_LEVEL = 200;
+export const XP_PER_LEVEL = 100;
+
+/** Maximum number of weapon slots the player can carry */
+export const MAX_WEAPON_SLOTS = 3;
 
 /** Base seed constant for procedural level generation */
 export const BASE_LEVEL_SEED = 0xDEAD;
@@ -153,3 +156,39 @@ export interface Upgrade {
 }
 
 export const BEST_SCORE_KEY = 'netrunner_best_score';
+
+/**
+ * Weapon attachment that can be bought from mid-game shop nodes and applied
+ * to a specific weapon to augment its stats.
+ */
+export interface AttachmentConfig {
+  id: string;
+  label: string;
+  desc: string;
+  cost: number;
+  /** If set, only applies to weapons with these IDs; if absent, applies to any weapon */
+  weaponFilter?: string[];
+  /** Flat bonus added to base damage */
+  damageBonus?: number;
+  /** Fire-rate multiplier (< 1 = faster) */
+  fireRateMult?: number;
+  /** Extra shots added to the weapon's magazine capacity */
+  magazineBonus?: number;
+  /** Spread multiplier applied to the weapon's base spread (< 1 = tighter) */
+  spreadMult?: number;
+  /** Reload-time multiplier (< 1 = faster) */
+  reloadTimeMult?: number;
+  /** Extra projectiles added per shot */
+  projectileBonus?: number;
+}
+
+export const ATTACHMENTS: AttachmentConfig[] = [
+  { id: 'scope',     label: '🔭 SCOPE',          desc: '+20 damage (pistol/sniper)', cost: 200, weaponFilter: ['pistol', 'sniper'],   damageBonus: 20 },
+  { id: 'extmag',    label: '📎 EXT. MAGAZINE',  desc: '+4 magazine capacity',       cost: 150,                                      magazineBonus: 4 },
+  { id: 'suppressor',label: '🔇 SUPPRESSOR',     desc: '-20% fire delay',            cost: 180,                                      fireRateMult: 0.8 },
+  { id: 'foregrip',  label: '🤝 FOREGRIP',       desc: '-50% spread (SMG/Shotgun)',  cost: 160, weaponFilter: ['smg', 'shotgun'],     spreadMult: 0.5 },
+  { id: 'drum',      label: '🥁 DRUM MAG',       desc: '+10 mag (SMG/Shotgun)',      cost: 250, weaponFilter: ['smg', 'shotgun'],     magazineBonus: 10 },
+  { id: 'hollowpt',  label: '💀 HOLLOW POINT',   desc: '+10 damage',                 cost: 220,                                      damageBonus: 10 },
+  { id: 'quickdraw', label: '⚡ QUICK DRAW',     desc: '-25% reload time',           cost: 200,                                      reloadTimeMult: 0.75 },
+  { id: 'fragrnds',  label: '💥 FRAG ROUNDS',    desc: '+1 projectile/shot (shotgun/grenade)', cost: 300, weaponFilter: ['shotgun', 'grenade'], projectileBonus: 1 },
+];

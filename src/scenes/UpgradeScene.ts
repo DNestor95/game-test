@@ -1,25 +1,31 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, WEAPONS } from '../config/GameConfig';
+import { GAME_WIDTH, GAME_HEIGHT, WEAPONS, MAX_WEAPON_SLOTS } from '../config/GameConfig';
 
 interface ShopData {
   round: number;
   score: number;
   credits: number;
-  ownedWeaponIds: string[];
+  /** Ordered list of weapon IDs in each slot (null = empty) */
+  weaponSlots: (string | null)[];
+  /** Index of the currently active slot */
+  activeSlotIndex: number;
 }
 
 /**
  * Displayed after completing a stage (hacking the exit node).
  * Shows the weapon shop so players can spend credits earned in the run.
- * Free upgrades/augmentations are no longer awarded here — they come
- * from the XP-based level-up system (LevelUpScene) instead.
+ * Free upgrades/augmentations come from the XP-based level-up system (LevelUpScene).
+ * Players can carry up to MAX_WEAPON_SLOTS (3) weapons; buying a new one fills
+ * an empty slot or replaces the currently active slot.
  */
 export class UpgradeScene extends Phaser.Scene {
   private credits = 0;
   private creditsSpent = 0;
   private selectedWeaponId: string | null = null;
-  private ownedWeaponIds: string[] = [];
+  private weaponSlots: (string | null)[] = [];
+  private activeSlotIndex = 0;
   private creditsDisplay!: Phaser.GameObjects.Text;
+  private slotsDisplay!: Phaser.GameObjects.Text;
 
   constructor() { super({ key: 'UpgradeScene' }); }
 
@@ -29,7 +35,8 @@ export class UpgradeScene extends Phaser.Scene {
     this.credits = data.credits;
     this.creditsSpent = 0;
     this.selectedWeaponId = null;
-    this.ownedWeaponIds = data.ownedWeaponIds ?? ['pistol'];
+    this.weaponSlots = data.weaponSlots ?? ['pistol', null, null];
+    this.activeSlotIndex = data.activeSlotIndex ?? 0;
   }
 
   create() {
@@ -53,25 +60,53 @@ export class UpgradeScene extends Phaser.Scene {
     divG.lineStyle(1, 0x224433, 1);
     divG.lineBetween(40, 84, GAME_WIDTH - 40, 84);
 
+    // ── CURRENT LOADOUT ──
+    this.add.text(cx, 94, '── CURRENT LOADOUT ──', {
+      fontSize: '13px', color: '#44aa66', fontFamily: 'Courier New',
+    }).setOrigin(0.5);
+
+    const slotLabels = this.weaponSlots.map((id, i) => {
+      const wep = id ? WEAPONS.find(w => w.id === id) : null;
+      const active = i === this.activeSlotIndex ? '▶' : ' ';
+      return `${active}[${i + 1}] ${wep ? wep.label : '--- EMPTY ---'}`;
+    }).join('   ');
+    this.slotsDisplay = this.add.text(cx, 113, slotLabels, {
+      fontSize: '11px', color: '#669966', fontFamily: 'Courier New',
+    }).setOrigin(0.5);
+
+    // Note about slot replacement if full
+    const emptySlot = this.weaponSlots.findIndex(s => s === null);
+    const slotsNote = emptySlot >= 0
+      ? `Empty slot [${emptySlot + 1}] available`
+      : `All slots full — buying replaces slot [${this.activeSlotIndex + 1}]`;
+    this.add.text(cx, 130, slotsNote, {
+      fontSize: '10px', color: '#446655', fontFamily: 'Courier New',
+    }).setOrigin(0.5);
+
+    const divG2 = this.add.graphics();
+    divG2.lineStyle(1, 0x224433, 1);
+    divG2.lineBetween(40, 144, GAME_WIDTH - 40, 144);
+
     // ── WEAPON SHOP SECTION ──
-    this.add.text(cx, 98, '── WEAPON SHOP ──', {
+    this.add.text(cx, 154, '── WEAPON SHOP ──', {
       fontSize: '15px', color: '#ff8844', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    this.add.text(cx, 116, 'Spend credits to arm up for the next stage', {
+    this.add.text(cx, 172, 'Spend credits to arm up for the next stage', {
       fontSize: '11px', color: '#556644', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    const buyableWeapons = WEAPONS.filter(w => !this.ownedWeaponIds.includes(w.id));
+    const ownedIds = this.weaponSlots.filter((id): id is string => id !== null);
+    const buyableWeapons = WEAPONS.filter(w => !ownedIds.includes(w.id));
     const weaponCards: Phaser.GameObjects.Rectangle[] = [];
 
     // Weapon card geometry — up to 3 per row, 2 rows max
     const WEP_W = 174;
-    const WEP_H = 100;
+    const WEP_H = 96;
     const WEP_COLS = 3;
     const WEP_COL_GAP = 16;
-    const WEP_ROW_GAP = 12;
-    const WEP_ROW1_Y = 134 + WEP_H / 2;
+    const WEP_ROW_GAP = 10;
+    const WEP_ROW1_Y = 186 + WEP_H / 2;
 
     buyableWeapons.forEach((wep, i) => {
       const row = Math.floor(i / WEP_COLS);
@@ -90,7 +125,7 @@ export class UpgradeScene extends Phaser.Scene {
       if (canAfford) card.setInteractive({ useHandCursor: true });
       weaponCards.push(card);
 
-      this.add.text(cardX, cardY - 30, wep.label, {
+      this.add.text(cardX, cardY - 28, wep.label, {
         fontSize: '14px', color: canAfford ? '#ffaa44' : '#664422',
         fontFamily: 'Courier New', align: 'center', wordWrap: { width: WEP_W - 12 },
       }).setOrigin(0.5);
@@ -100,7 +135,7 @@ export class UpgradeScene extends Phaser.Scene {
         fontFamily: 'Courier New', align: 'center', wordWrap: { width: WEP_W - 12 },
       }).setOrigin(0.5);
 
-      this.add.text(cardX, cardY + 22, `¥ ${wep.cost}`, {
+      this.add.text(cardX, cardY + 20, `¥ ${wep.cost}`, {
         fontSize: '14px', color: canAfford ? '#ffcc00' : '#664422',
         fontFamily: 'Courier New',
       }).setOrigin(0.5);
@@ -158,9 +193,10 @@ export class UpgradeScene extends Phaser.Scene {
     this.input.keyboard!.once('keydown-ENTER', () => this.deploy());
     this.input.keyboard!.once('keydown-SPACE', () => this.deploy());
 
-    this.add.text(cx, GAME_HEIGHT - 12, 'CLICK WEAPON TO BUY  •  ENTER TO DEPLOY  •  AUGMENTS FROM LEVEL-UPS', {
-      fontSize: '10px', color: '#446655', fontFamily: 'Courier New',
-    }).setOrigin(0.5);
+    this.add.text(cx, GAME_HEIGHT - 12,
+      `CLICK WEAPON TO BUY  •  ENTER TO DEPLOY  •  MAX ${MAX_WEAPON_SLOTS} WEAPONS  •  AUGMENTS FROM LEVEL-UPS`, {
+        fontSize: '10px', color: '#446655', fontFamily: 'Courier New',
+      }).setOrigin(0.5);
   }
 
   private deploy() {
@@ -173,3 +209,4 @@ export class UpgradeScene extends Phaser.Scene {
     });
   }
 }
+

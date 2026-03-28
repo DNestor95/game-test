@@ -23,8 +23,8 @@ export class RoundManager {
       round: r,
       nodesRequired: ROUND_BASE_NODES + Math.floor((r - 1) * 1.5),
       timerSec: Math.max(15, ROUND_BASE_TIMER_S - (r - 1) * 2),
-      enemySpeedMult: 1 + (r - 1) * 0.20,
-      enemyCountMult: 1 + (r - 1) * 0.35,
+      enemySpeedMult: 1 + (r - 1) * 0.25,
+      enemyCountMult: 1 + (r - 1) * 0.6,
       enemyHpMult: 1 + (r - 1) * 0.40,
     };
   }

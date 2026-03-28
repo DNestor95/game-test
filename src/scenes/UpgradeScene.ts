@@ -16,7 +16,8 @@ interface ShopData {
  * Shows the weapon shop so players can spend credits earned in the run.
  * Free upgrades/augmentations come from the XP-based level-up system (LevelUpScene).
  * Players can carry up to MAX_WEAPON_SLOTS (3) weapons; buying a new one fills
- * an empty slot or replaces the currently active slot.
+ * an empty slot, or — when all slots are full — replaces whichever slot the player
+ * selects in the loadout section.
  */
 export class UpgradeScene extends Phaser.Scene {
   private credits = 0;
@@ -24,8 +25,16 @@ export class UpgradeScene extends Phaser.Scene {
   private selectedWeaponId: string | null = null;
   private weaponSlots: (string | null)[] = [];
   private activeSlotIndex = 0;
+  /** Index of the slot the player chose to replace (only relevant when all slots full) */
+  private replaceSlotIndex = 0;
   private creditsDisplay!: Phaser.GameObjects.Text;
-  private slotsDisplay!: Phaser.GameObjects.Text;
+  /** Whether all weapon slots are occupied */
+  private allSlotsFull = false;
+
+  // Interactive slot UI elements (created once, updated on selection changes)
+  private slotCards: Phaser.GameObjects.Rectangle[] = [];
+  private slotLabels: Phaser.GameObjects.Text[] = [];
+  private slotNote!: Phaser.GameObjects.Text;
 
   constructor() { super({ key: 'UpgradeScene' }); }
 
@@ -37,6 +46,8 @@ export class UpgradeScene extends Phaser.Scene {
     this.selectedWeaponId = null;
     this.weaponSlots = data.weaponSlots ?? ['pistol', null, null];
     this.activeSlotIndex = data.activeSlotIndex ?? 0;
+    this.replaceSlotIndex = data.activeSlotIndex ?? 0;
+    this.allSlotsFull = this.weaponSlots.every(s => s !== null);
   }
 
   create() {
@@ -60,39 +71,77 @@ export class UpgradeScene extends Phaser.Scene {
     divG.lineStyle(1, 0x224433, 1);
     divG.lineBetween(40, 84, GAME_WIDTH - 40, 84);
 
-    // ── CURRENT LOADOUT ──
+    // ── CURRENT LOADOUT (interactive slot cards) ──
     this.add.text(cx, 94, '── CURRENT LOADOUT ──', {
       fontSize: '13px', color: '#44aa66', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    const slotLabels = this.weaponSlots.map((id, i) => {
+    this.slotCards = [];
+    this.slotLabels = [];
+
+    const SLOT_W = 210;
+    const SLOT_H = 26;
+    const SLOT_GAP = 12;
+    const totalSlotsW = MAX_WEAPON_SLOTS * SLOT_W + (MAX_WEAPON_SLOTS - 1) * SLOT_GAP;
+    const slotsStartX = (GAME_WIDTH - totalSlotsW) / 2 + SLOT_W / 2;
+    const slotsY = 115;
+
+    for (let i = 0; i < MAX_WEAPON_SLOTS; i++) {
+      const sx = slotsStartX + i * (SLOT_W + SLOT_GAP);
+      const id = this.weaponSlots[i];
       const wep = id ? WEAPONS.find(w => w.id === id) : null;
       const active = i === this.activeSlotIndex ? '▶' : ' ';
-      return `${active}[${i + 1}] ${wep ? wep.label : '--- EMPTY ---'}`;
-    }).join('   ');
-    this.slotsDisplay = this.add.text(cx, 113, slotLabels, {
-      fontSize: '11px', color: '#669966', fontFamily: 'Courier New',
-    }).setOrigin(0.5);
+      const label = `${active}[${i + 1}] ${wep ? wep.label : '--- EMPTY ---'}`;
 
-    // Note about slot replacement if full
+      const card = this.add.rectangle(sx, slotsY, SLOT_W, SLOT_H, 0x0a1a14)
+        .setStrokeStyle(1, 0x224433);
+      this.slotCards.push(card);
+
+      const txt = this.add.text(sx, slotsY, label, {
+        fontSize: '11px', color: '#669966', fontFamily: 'Courier New',
+      }).setOrigin(0.5);
+      this.slotLabels.push(txt);
+
+      // Slot replacement interaction — only when all slots full and a weapon is selected
+      if (this.allSlotsFull) {
+        card.setInteractive({ useHandCursor: true });
+        card.on('pointerover', () => {
+          if (this.selectedWeaponId && this.replaceSlotIndex !== i) {
+            card.setStrokeStyle(2, 0xffcc44);
+          }
+        });
+        card.on('pointerout', () => {
+          if (this.selectedWeaponId && this.replaceSlotIndex !== i) {
+            card.setStrokeStyle(1, 0x224433);
+          }
+        });
+        card.on('pointerdown', () => {
+          if (!this.selectedWeaponId) return; // only allow slot selection when a weapon is chosen
+          this.replaceSlotIndex = i;
+          this.refreshSlotHighlights();
+        });
+      }
+    }
+
+    // Slot replacement note
     const emptySlot = this.weaponSlots.findIndex(s => s === null);
-    const slotsNote = emptySlot >= 0
-      ? `Empty slot [${emptySlot + 1}] available`
-      : `All slots full — buying replaces slot [${this.activeSlotIndex + 1}]`;
-    this.add.text(cx, 130, slotsNote, {
+    const noteText = this.allSlotsFull
+      ? 'All slots full — click a slot above to choose which to replace'
+      : `Empty slot [${emptySlot + 1}] available`;
+    this.slotNote = this.add.text(cx, slotsY + 20, noteText, {
       fontSize: '10px', color: '#446655', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
     const divG2 = this.add.graphics();
     divG2.lineStyle(1, 0x224433, 1);
-    divG2.lineBetween(40, 144, GAME_WIDTH - 40, 144);
+    divG2.lineBetween(40, 148, GAME_WIDTH - 40, 148);
 
     // ── WEAPON SHOP SECTION ──
-    this.add.text(cx, 154, '── WEAPON SHOP ──', {
+    this.add.text(cx, 158, '── WEAPON SHOP ──', {
       fontSize: '15px', color: '#ff8844', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    this.add.text(cx, 172, 'Spend credits to arm up for the next stage', {
+    this.add.text(cx, 176, 'Spend credits to arm up for the next stage', {
       fontSize: '11px', color: '#556644', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
@@ -106,7 +155,7 @@ export class UpgradeScene extends Phaser.Scene {
     const WEP_COLS = 3;
     const WEP_COL_GAP = 16;
     const WEP_ROW_GAP = 10;
-    const WEP_ROW1_Y = 186 + WEP_H / 2;
+    const WEP_ROW1_Y = 190 + WEP_H / 2;
 
     buyableWeapons.forEach((wep, i) => {
       const row = Math.floor(i / WEP_COLS);
@@ -166,6 +215,7 @@ export class UpgradeScene extends Phaser.Scene {
             card.setStrokeStyle(3, 0xffff44);
           }
           this.creditsDisplay.setText(`¥ ${this.credits} CREDITS`);
+          this.refreshSlotHighlights();
         });
       }
     });
@@ -199,11 +249,43 @@ export class UpgradeScene extends Phaser.Scene {
       }).setOrigin(0.5);
   }
 
+  /**
+   * Update slot card highlights based on whether a weapon is selected and which
+   * slot is targeted for replacement (when all slots are full).
+   */
+  private refreshSlotHighlights() {
+    for (let i = 0; i < this.slotCards.length; i++) {
+      const card = this.slotCards[i];
+      const label = this.slotLabels[i];
+      if (this.allSlotsFull && this.selectedWeaponId && i === this.replaceSlotIndex) {
+        card.setStrokeStyle(2, 0xff4444);
+        label.setColor('#ff6666');
+      } else {
+        card.setStrokeStyle(1, 0x224433);
+        label.setColor('#669966');
+      }
+    }
+
+    // Update slot note text
+    if (this.allSlotsFull && this.selectedWeaponId) {
+      const wep = this.weaponSlots[this.replaceSlotIndex];
+      const wepCfg = wep ? WEAPONS.find(w => w.id === wep) : null;
+      this.slotNote.setText(
+        `Replacing slot [${this.replaceSlotIndex + 1}] ${wepCfg ? wepCfg.label : ''} — click another slot to change`
+      );
+      this.slotNote.setColor('#ff6666');
+    } else if (this.allSlotsFull) {
+      this.slotNote.setText('All slots full — click a slot above to choose which to replace');
+      this.slotNote.setColor('#446655');
+    }
+  }
+
   private deploy() {
     this.scene.stop('UpgradeScene');
     this.scene.resume('GameScene', {
       upgrade: null,
       newWeaponId: this.selectedWeaponId,
+      replaceSlotIndex: this.allSlotsFull ? this.replaceSlotIndex : undefined,
       creditsSpent: this.creditsSpent,
       nextRound: true,
     });

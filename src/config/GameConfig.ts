@@ -4,8 +4,8 @@ export const GAME_HEIGHT = 600;
 export const WORLD_WIDTH = 1600;
 export const WORLD_HEIGHT = 1200;
 
-export const PLAYER_SPEED = 200;
-export const DASH_SPEED = 550;
+export const PLAYER_SPEED = 140;
+export const DASH_SPEED = 400;
 export const DASH_DURATION = 180;
 export const DASH_COOLDOWN = 2500;
 
@@ -21,7 +21,7 @@ export const BASE_SCORE = 100;
 export const HEAT_PER_HACK = 0.08;
 export const HEAT_DAMAGE_SPIKE = 0.12;
 
-export const ENEMY_BASE_SPEED = 110;
+export const ENEMY_BASE_SPEED = 75;
 export const ENEMY_DAMAGE = 25;
 export const ENEMY_HIT_COOLDOWN = 800;
 export const ENEMY_HP = 60;
@@ -61,7 +61,7 @@ export const OVERTIME_HP_TIME_UNIT = 10;
  * Minimum spawn interval (ms) under normal conditions.
  * Heat further reduces the effective interval, but it is capped at this floor.
  */
-export const MIN_SPAWN_INTERVAL_MS = 600;
+export const MIN_SPAWN_INTERVAL_MS = 400;
 
 /**
  * Absolute minimum spawn interval (ms) that overtime escalation can reach.

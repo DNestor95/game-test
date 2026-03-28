@@ -61,7 +61,7 @@ export const OVERTIME_HP_TIME_UNIT = 10;
  * Minimum spawn interval (ms) under normal conditions.
  * Heat further reduces the effective interval, but it is capped at this floor.
  */
-export const MIN_SPAWN_INTERVAL_MS = 600;
+export const MIN_SPAWN_INTERVAL_MS = 400;
 
 /**
  * Absolute minimum spawn interval (ms) that overtime escalation can reach.

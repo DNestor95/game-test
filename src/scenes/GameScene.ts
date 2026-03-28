@@ -30,6 +30,8 @@ type RoundPhase = 'INTRO' | 'ACTIVE' | 'ROUND_RESULT' | 'GAME_OVER';
 interface ResumeData {
   upgrade?: Upgrade;
   newWeaponId?: string | null;
+  /** Slot index chosen by the player for weapon replacement (used when all slots are full) */
+  replaceSlotIndex?: number;
   /** Attachments purchased in the mid-game attachment shop */
   newAttachments?: Array<{ weaponId: string; attachmentId: string }>;
   creditsSpent: number;
@@ -179,7 +181,7 @@ export class GameScene extends Phaser.Scene {
     this.introTimer = 1000;
     this.introCountdown = 3;
     this.enemySpawnTimer = 0;
-    this.enemySpawnInterval = Math.max(1500, 4000 - this.roundMgr.round * 200);
+    this.enemySpawnInterval = Math.max(1000, 3500 - this.roundMgr.round * 250);
     this.levelUpPending = false;
 
     // Reset magazine for each slot that has a weapon
@@ -354,9 +356,11 @@ export class GameScene extends Phaser.Scene {
     if (data?.newWeaponId) {
       const wep = WEAPONS.find(w => w.id === data.newWeaponId);
       if (wep) {
-        // Put weapon in first empty slot; if all full, replace active slot
+        // Put weapon in first empty slot; if all full, use player-chosen slot or active slot
         const emptyIdx = this.weaponSlots.findIndex(s => s === null);
-        const targetSlot = emptyIdx >= 0 ? emptyIdx : this.activeSlotIndex;
+        const targetSlot = emptyIdx >= 0
+          ? emptyIdx
+          : (data.replaceSlotIndex != null ? data.replaceSlotIndex : this.activeSlotIndex);
         this.weaponSlots[targetSlot] = wep;
         this.slotMagazines[targetSlot] = this.getEffectiveMagazine(wep);
         this.slotReloadTimers[targetSlot] = 0;
@@ -506,7 +510,11 @@ export class GameScene extends Phaser.Scene {
         const x = overtimeSecs / OVERTIME_HP_TIME_UNIT;
         hpMult *= 1 + (x * x) / 4;
       }
-      this.spawnEnemy(cfg.enemySpeedMult, countMult, hpMult);
+      // Spawn multiple enemies per tick at higher rounds (1 at round 1, up to 5)
+      const spawnBatch = Math.min(5, 1 + Math.floor((cfg.round - 1) / 3));
+      for (let i = 0; i < spawnBatch; i++) {
+        this.spawnEnemy(cfg.enemySpeedMult, countMult, hpMult);
+      }
       const interval = this.enemySpawnInterval / (1 + this.heat * 3);
       // In overtime the minimum spawn interval shrinks exponentially as well
       const minInterval = this.overtimeMode
@@ -802,7 +810,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnEnemy(speedMult: number, countMult: number, hpMult: number) {
-    const maxEnemies = Math.floor(4 * countMult + this.heat * 8);
+    const maxEnemies = Math.floor(6 * countMult + this.heat * 8);
     const current = this.enemies.getLength();
     if (current >= maxEnemies) return;
 

@@ -184,6 +184,11 @@ export class GameScene extends Phaser.Scene {
     this.enemySpawnInterval = Math.max(1000, 3500 - this.roundMgr.round * 250);
     this.levelUpPending = false;
 
+    // Player speed increases each round — early game is precise, late game is fast
+    if (this.roundMgr.round > 1) {
+      this.player.moveSpeed += 8;
+    }
+
     // Reset magazine for each slot that has a weapon
     for (let i = 0; i < MAX_WEAPON_SLOTS; i++) {
       const wep = this.weaponSlots[i];

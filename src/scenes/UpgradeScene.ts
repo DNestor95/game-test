@@ -111,7 +111,7 @@ export class UpgradeScene extends Phaser.Scene {
           }
         });
         card.on('pointerout', () => {
-          if (this.replaceSlotIndex !== i) {
+          if (this.selectedWeaponId && this.replaceSlotIndex !== i) {
             card.setStrokeStyle(1, 0x224433);
           }
         });

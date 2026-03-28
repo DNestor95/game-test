@@ -18,7 +18,8 @@ import {
   Upgrade, StatBoostType,
   XP_PER_KILL, XP_PER_HACK, XP_PER_EXIT,
   BASE_LEVEL_SEED, createSeededRNG,
-  OVERTIME_COUNT_MULT, OVERTIME_HP_MULT,
+  OVERTIME_SPAWN_GROWTH, OVERTIME_HP_TIME_UNIT,
+  MIN_SPAWN_INTERVAL_MS, OVERTIME_MIN_SPAWN_INTERVAL_MS,
 } from '../config/GameConfig';
 
 type RoundPhase = 'INTRO' | 'ACTIVE' | 'ROUND_RESULT' | 'GAME_OVER';
@@ -44,6 +45,7 @@ export class GameScene extends Phaser.Scene {
 
   private heat = 0;
   private overtimeMode = false;
+  private overtimeElapsedMs = 0;
   private roundTimerMs = 0;
   private phase: RoundPhase = 'INTRO';
   private introTimer = 0;
@@ -81,6 +83,7 @@ export class GameScene extends Phaser.Scene {
     this.scoreMgr = new ScoreManager();
     this.heat = 0;
     this.overtimeMode = false;
+    this.overtimeElapsedMs = 0;
     this.phase = 'INTRO';
     this.introTimer = 1000;
     this.introCountdown = 3;
@@ -147,6 +150,7 @@ export class GameScene extends Phaser.Scene {
     const cfg = this.roundMgr.getRoundConfig();
     this.roundTimerMs = cfg.timerSec * 1000;
     this.overtimeMode = false;
+    this.overtimeElapsedMs = 0;
     this.phase = 'INTRO';
     this.introTimer = 1000;
     this.introCountdown = 3;
@@ -366,19 +370,37 @@ export class GameScene extends Phaser.Scene {
       this.roundTimerMs = 0;
       if (!this.overtimeMode) {
         this.overtimeMode = true;
+        this.overtimeElapsedMs = 0;
         this.getUIScene()?.showMessage('⚠ OVERTIME! ⚠', '#ff4400', 2500);
       }
+    }
+
+    if (this.overtimeMode) {
+      this.overtimeElapsedMs += delta;
     }
 
     this.heat = Math.max(0, this.heat - 0.0005 * delta);
 
     this.enemySpawnTimer -= delta;
     if (this.enemySpawnTimer <= 0) {
-      const countMult = cfg.enemyCountMult * (this.overtimeMode ? OVERTIME_COUNT_MULT : 1);
-      const hpMult = cfg.enemyHpMult * (this.overtimeMode ? OVERTIME_HP_MULT : 1);
+      let countMult = cfg.enemyCountMult;
+      let hpMult = cfg.enemyHpMult;
+      if (this.overtimeMode) {
+        const overtimeSecs = this.overtimeElapsedMs / 1000;
+        // Spawn count cap grows exponentially with overtime duration
+        const spawnRateMult = Math.exp(overtimeSecs * OVERTIME_SPAWN_GROWTH);
+        countMult *= spawnRateMult;
+        // HP grows quadratically: (x²/4) added per OVERTIME_HP_TIME_UNIT seconds
+        const x = overtimeSecs / OVERTIME_HP_TIME_UNIT;
+        hpMult *= 1 + (x * x) / 4;
+      }
       this.spawnEnemy(cfg.enemySpeedMult, countMult, hpMult);
       const interval = this.enemySpawnInterval / (1 + this.heat * 3);
-      this.enemySpawnTimer = Math.max(600, interval);
+      // In overtime the minimum spawn interval shrinks exponentially as well
+      const minInterval = this.overtimeMode
+        ? Math.max(OVERTIME_MIN_SPAWN_INTERVAL_MS, MIN_SPAWN_INTERVAL_MS / Math.exp((this.overtimeElapsedMs / 1000) * OVERTIME_SPAWN_GROWTH))
+        : MIN_SPAWN_INTERVAL_MS;
+      this.enemySpawnTimer = Math.max(minInterval, interval);
     }
 
     // Enemy movement and collision with player

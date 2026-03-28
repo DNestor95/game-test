@@ -42,10 +42,32 @@ export const SLOW_SPEED_MULT = 0.35;
 export const ROUND_BASE_TIMER_S = 35;
 export const ROUND_BASE_NODES = 4;
 
-/** Extra enemy count multiplier applied when time expires (overtime mode) */
-export const OVERTIME_COUNT_MULT = 1.5;
-/** Extra enemy HP multiplier applied when time expires (overtime mode) */
-export const OVERTIME_HP_MULT = 1.5;
+/**
+ * Exponential growth constant for overtime spawn rate.
+ * The spawn count cap is multiplied by e^(overtimeSecs * OVERTIME_SPAWN_GROWTH),
+ * and the minimum spawn interval floor decreases at the same rate.
+ * At this value the spawn rate roughly doubles every ~17 seconds of overtime.
+ */
+export const OVERTIME_SPAWN_GROWTH = 0.04;
+
+/**
+ * Time unit (in seconds) for the overtime HP scaling formula.
+ * Enemy HP multiplier in overtime = base * (1 + (overtimeSecs / OVERTIME_HP_TIME_UNIT)² / 4).
+ * Every OVERTIME_HP_TIME_UNIT seconds of overtime adds 0.25× to the HP multiplier.
+ */
+export const OVERTIME_HP_TIME_UNIT = 10;
+
+/**
+ * Minimum spawn interval (ms) under normal conditions.
+ * Heat further reduces the effective interval, but it is capped at this floor.
+ */
+export const MIN_SPAWN_INTERVAL_MS = 600;
+
+/**
+ * Absolute minimum spawn interval (ms) that overtime escalation can reach.
+ * Prevents spawning from becoming instantaneous at very long overtime durations.
+ */
+export const OVERTIME_MIN_SPAWN_INTERVAL_MS = 100;
 
 /** XP awarded for killing an enemy */
 export const XP_PER_KILL = 15;

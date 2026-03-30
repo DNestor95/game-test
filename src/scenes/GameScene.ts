@@ -6,6 +6,7 @@ import { Obstacle } from '../objects/Obstacle';
 import { Projectile, ProjectileOptions } from '../objects/Projectile';
 import { RoundManager } from '../systems/RoundManager';
 import { ScoreManager } from '../systems/ScoreManager';
+import { SpawnDirector } from '../systems/SpawnDirector';
 import { UIScene, WeaponSlotHUD } from './UIScene';
 import {
   GAME_WIDTH, GAME_HEIGHT,
@@ -22,6 +23,8 @@ import {
   OVERTIME_SPAWN_GROWTH, OVERTIME_HP_TIME_UNIT,
   MIN_SPAWN_INTERVAL_MS, OVERTIME_MIN_SPAWN_INTERVAL_MS,
   MAX_WEAPON_SLOTS,
+  SPAWN_MAX_ENEMIES,
+  PLAYER_MAX_HP,
 } from '../config/GameConfig';
 
 type RoundPhase = 'INTRO' | 'ACTIVE' | 'ROUND_RESULT' | 'GAME_OVER';
@@ -48,6 +51,7 @@ export class GameScene extends Phaser.Scene {
   private obstacleGroup!: Phaser.Physics.Arcade.StaticGroup;
   private roundMgr!: RoundManager;
   private scoreMgr!: ScoreManager;
+  private spawnDirector!: SpawnDirector;
 
   private heat = 0;
   private overtimeMode = false;
@@ -57,8 +61,8 @@ export class GameScene extends Phaser.Scene {
   private introTimer = 0;
   private introCountdown = 3;
 
-  private enemySpawnTimer = 0;
-  private enemySpawnInterval = 4000;
+  /** Timer for overtime fallback spawning after the director finishes its budget */
+  private _overtimeSpawnTimer = 0;
 
   // ── 3-slot weapon inventory ──
   /** Up to MAX_WEAPON_SLOTS weapon configs (null = empty slot) */
@@ -98,6 +102,7 @@ export class GameScene extends Phaser.Scene {
   create() {
     this.roundMgr = new RoundManager();
     this.scoreMgr = new ScoreManager();
+    this.spawnDirector = new SpawnDirector();
     this.heat = 0;
     this.overtimeMode = false;
     this.overtimeElapsedMs = 0;
@@ -180,9 +185,11 @@ export class GameScene extends Phaser.Scene {
     this.phase = 'INTRO';
     this.introTimer = 1000;
     this.introCountdown = 3;
-    this.enemySpawnTimer = 0;
-    this.enemySpawnInterval = Math.max(1000, 3500 - this.roundMgr.round * 250);
     this.levelUpPending = false;
+
+    // Initialise the spawn director for this round
+    this.spawnDirector.startRound(cfg.round, cfg.enemyHpMult, cfg.enemySpeedMult);
+    this._overtimeSpawnTimer = 0;
 
     // Player speed increases each round — early game is precise, late game is fast
     if (this.roundMgr.round > 1) {
@@ -502,30 +509,40 @@ export class GameScene extends Phaser.Scene {
 
     this.heat = Math.max(0, this.heat - 0.0005 * delta);
 
-    this.enemySpawnTimer -= delta;
-    if (this.enemySpawnTimer <= 0) {
-      let countMult = cfg.enemyCountMult;
-      let hpMult = cfg.enemyHpMult;
-      if (this.overtimeMode) {
-        const overtimeSecs = this.overtimeElapsedMs / 1000;
-        // Spawn count cap grows exponentially with overtime duration
-        const spawnRateMult = Math.exp(overtimeSecs * OVERTIME_SPAWN_GROWTH);
-        countMult *= spawnRateMult;
-        // HP grows quadratically: (x²/4) added per OVERTIME_HP_TIME_UNIT seconds
-        const x = overtimeSecs / OVERTIME_HP_TIME_UNIT;
-        hpMult *= 1 + (x * x) / 4;
+    // ── Spawn director: budget-based pulse spawning ──────────────────
+    {
+      const maxEnemies = SPAWN_MAX_ENEMIES;
+      const currentEnemies = this.enemies.getLength();
+      const ctx = {
+        playerHpFrac: this.player.hp / (this.player.maxHp ?? PLAYER_MAX_HP),
+        aliveEnemies: currentEnemies,
+        maxAllowedEnemies: maxEnemies,
+      };
+      const requests = this.spawnDirector.update(delta, ctx, this.player.x, this.player.y);
+      let spawned = 0;
+      for (const req of requests) {
+        if (currentEnemies + spawned >= maxEnemies) break;
+        const enemy = new Enemy(this, req.x, req.y, req.speedMult, req.hpMult, req.type);
+        this.enemies.add(enemy);
+        spawned++;
       }
-      // Spawn multiple enemies per tick at higher rounds (1 at round 1, up to 5)
-      const spawnBatch = Math.min(5, 1 + Math.floor((cfg.round - 1) / 3));
-      for (let i = 0; i < spawnBatch; i++) {
-        this.spawnEnemy(cfg.enemySpeedMult, countMult, hpMult);
+
+      // In overtime keep spawning extra grunts on a fast timer to maintain pressure
+      if (this.overtimeMode && this.spawnDirector.roundSpawningDone) {
+        this._overtimeSpawnTimer -= delta;
+        if (this._overtimeSpawnTimer <= 0) {
+          const overtimeSecs = this.overtimeElapsedMs / 1000;
+          const hpMult = cfg.enemyHpMult * (1 + Math.pow(overtimeSecs / OVERTIME_HP_TIME_UNIT, 2) / 4);
+          const spawnBatch = Math.min(5, 1 + Math.floor((cfg.round - 1) / 3));
+          for (let i = 0; i < spawnBatch; i++) {
+            if (this.enemies.getLength() >= maxEnemies) break;
+            this.spawnEnemy(cfg.enemySpeedMult, cfg.enemyCountMult, hpMult);
+          }
+          const interval = Math.max(1000, 3500 - this.roundMgr.round * 250) / (1 + this.heat * 3);
+          const minInterval = Math.max(OVERTIME_MIN_SPAWN_INTERVAL_MS, MIN_SPAWN_INTERVAL_MS / Math.exp(overtimeSecs * OVERTIME_SPAWN_GROWTH));
+          this._overtimeSpawnTimer = Math.max(minInterval, interval);
+        }
       }
-      const interval = this.enemySpawnInterval / (1 + this.heat * 3);
-      // In overtime the minimum spawn interval shrinks exponentially as well
-      const minInterval = this.overtimeMode
-        ? Math.max(OVERTIME_MIN_SPAWN_INTERVAL_MS, MIN_SPAWN_INTERVAL_MS / Math.exp((this.overtimeElapsedMs / 1000) * OVERTIME_SPAWN_GROWTH))
-        : MIN_SPAWN_INTERVAL_MS;
-      this.enemySpawnTimer = Math.max(minInterval, interval);
     }
 
     // Enemy movement and collision with player
@@ -620,12 +637,7 @@ export class GameScene extends Phaser.Scene {
           proj.destroy();
           this.projectiles.remove(proj, false, false);
           if (killed) {
-            this.scoreMgr.addMoney(enemy.moneyReward);
-            this.showFloatingMoney(enemy.x, enemy.y, enemy.moneyReward);
-            enemy.destroy();
-            this.enemies.remove(enemy, false, false);
-            // Award XP for the kill and check for level up
-            this.awardXP(XP_PER_KILL);
+            this.handleEnemyKill(enemy);
           }
           break;
         }
@@ -782,11 +794,7 @@ export class GameScene extends Phaser.Scene {
           enemy.applyEffect(effectType, effectDuration);
         }
         if (killed) {
-          this.scoreMgr.addMoney(enemy.moneyReward);
-          this.showFloatingMoney(enemy.x, enemy.y, enemy.moneyReward);
-          enemy.destroy();
-          this.enemies.remove(enemy, false, false);
-          this.awardXP(XP_PER_KILL);
+          this.handleEnemyKill(enemy);
         }
       }
     }
@@ -814,13 +822,39 @@ export class GameScene extends Phaser.Scene {
     return this.scene.get('UIScene') as UIScene | null;
   }
 
+  /**
+   * Handle all side-effects of an enemy dying: money, XP, and type-specific
+   * on-death behaviour (e.g. exploder detonation).
+   */
+  private handleEnemyKill(enemy: Enemy) {
+    const ex = enemy.x;
+    const ey = enemy.y;
+    this.scoreMgr.addMoney(enemy.moneyReward);
+    this.showFloatingMoney(ex, ey, enemy.moneyReward);
+
+    // Exploder on-death detonation — damages the player if in range
+    const cfg = enemy.typeConfig;
+    if (cfg && cfg.explodeRadius && cfg.explodeDamage) {
+      const dx = this.player.x - ex;
+      const dy = this.player.y - ey;
+      if (Math.sqrt(dx * dx + dy * dy) <= cfg.explodeRadius) {
+        this.player.takeDamage(cfg.explodeDamage);
+        this.getUIScene()?.showMessage('EXPLOSION!', '#ff6600', 600);
+      }
+      this.showExplosion(ex, ey, cfg.explodeRadius);
+    }
+
+    enemy.destroy();
+    this.enemies.remove(enemy, false, false);
+    this.awardXP(XP_PER_KILL);
+  }
+
   private spawnEnemy(speedMult: number, countMult: number, hpMult: number) {
-    const maxEnemies = Math.floor(6 * countMult + this.heat * 8);
     const current = this.enemies.getLength();
-    if (current >= maxEnemies) return;
+    if (current >= SPAWN_MAX_ENEMIES) return;
 
     const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-    const dist = 420;
+    const dist = Phaser.Math.FloatBetween(300, 500);
     const ex = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 50, WORLD_WIDTH - 50);
     const ey = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 50, WORLD_HEIGHT - 50);
     const enemy = new Enemy(this, ex, ey, speedMult + this.heat * 0.5, hpMult);

@@ -27,6 +27,22 @@ export const ENEMY_HIT_COOLDOWN = 800;
 export const ENEMY_HP = 60;
 export const ENEMY_KILL_MONEY = 30;
 
+// ── SPAWN DIRECTOR CONFIGURATION ─────────────────────
+/** Base spawn budget added every round */
+export const SPAWN_BUDGET_BASE = 18;
+/** Linear scaling factor: budget += LINEAR * round */
+export const SPAWN_BUDGET_LINEAR = 5;
+/** Exponential scaling factor: budget += EXPO * round^1.25 */
+export const SPAWN_BUDGET_EXPO = 2;
+/** Minimum distance (px) from the player for a new spawn */
+export const SPAWN_MIN_RADIUS = 300;
+/** Maximum distance (px) from the player for a new spawn */
+export const SPAWN_MAX_RADIUS = 500;
+/** Extra spawn distance per unit of enemy base speed (fairness for fast enemies) */
+export const SPAWN_SPEED_FACTOR = 0.6;
+/** Hard cap on simultaneous alive enemies in the world */
+export const SPAWN_MAX_ENEMIES = 60;
+
 export const NODE_HACK_MONEY = 250;
 export const FINAL_NODE_MONEY = 500;
 

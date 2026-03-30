@@ -13,6 +13,8 @@ import {
   SPAWN_MIN_RADIUS, SPAWN_MAX_RADIUS, SPAWN_SPEED_FACTOR,
   SPAWN_BUDGET_BASE, SPAWN_BUDGET_LINEAR, SPAWN_BUDGET_EXPO,
   SPAWN_MAX_ENEMIES,
+  WAVE_LULL_BASE_MS, WAVE_LULL_MIN_MS, WAVE_INTENSITY_SCALE,
+  WAVE_LULL_ROUND_DECREASE_MS, WAVE_LULL_WAVE_DECREASE_MS,
 } from '../config/GameConfig';
 
 // ── Budget helpers ──────────────────────────────────────────────────────────
@@ -62,6 +64,16 @@ export class SpawnDirector {
   /** Fraction of budget reserved for elites on elite rounds */
   private _eliteReserveFrac = 0;
 
+  // ── Endless wave cycling ──────────────────────────────────────────────
+  /** How many wave cycles have completed within this stage (0 = first wave). */
+  private _waveIndex = 0;
+  /** Budget for the first wave (after boss deduction); used as baseline for scaling. */
+  private _baseStageBudget = 0;
+  /** True while the director is in the lull pause between wave cycles. */
+  private _inLull = false;
+  /** Remaining lull time in ms. */
+  private _lullTimer = 0;
+
   // ── Director aggression ───────────────────────────────────────────────
   /** Multiplier applied to each pulse budget by the AI director (0.85–1.15) */
   private _aggressionMult = 1;
@@ -95,6 +107,13 @@ export class SpawnDirector {
     this._remainingBudget = budget;
     this._pulseBudget = this._remainingBudget / this._pulseCount;
 
+    // ── Wave-cycling state ─────────────────────────────────────────────
+    // Store the non-boss budget as the baseline for future wave escalation
+    this._baseStageBudget = budget;
+    this._waveIndex = 0;
+    this._inLull = false;
+    this._lullTimer = 0;
+
     // Start the first pulse immediately
     this._pulseTimer = 0;
   }
@@ -102,17 +121,39 @@ export class SpawnDirector {
   /** Current round number. */
   get round() { return this._round; }
 
-  /** True once every pulse in the round has been spent. */
-  get roundSpawningDone() {
-    return this._pulseIndex >= this._pulseCount && this._remainingBudget <= 0;
+  /** True while the director is in the lull pause between wave cycles. */
+  get isInLull() {
+    return this._inLull;
   }
 
   /**
    * Tick the director.
+   * @param overtime - When true the director skips the inter-wave lull so
+   *   pressure remains constant after the stage timer expires.
    * @returns An array of enemy spawn requests for this frame (may be empty).
    */
-  update(delta: number, ctx: DirectorContext, playerX: number, playerY: number): SpawnRequest[] {
-    if (this._pulseIndex >= this._pulseCount && !this._bossNeedSpawn()) return [];
+  update(delta: number, ctx: DirectorContext, playerX: number, playerY: number, overtime = false): SpawnRequest[] {
+    // ── Inter-wave lull ────────────────────────────────────────────────
+    if (this._inLull) {
+      if (!overtime) {
+        this._lullTimer -= delta;
+        if (this._lullTimer > 0) return [];
+      }
+      // Lull over (or skipped in overtime) — begin next wave cycle
+      this._inLull = false;
+      this._startNextWave();
+    }
+
+    if (this._pulseIndex >= this._pulseCount && !this._bossNeedSpawn()) {
+      // All pulses for this wave cycle are spent — enter lull before next wave
+      const lullDuration = Math.max(
+        WAVE_LULL_MIN_MS,
+        WAVE_LULL_BASE_MS - this._round * WAVE_LULL_ROUND_DECREASE_MS - this._waveIndex * WAVE_LULL_WAVE_DECREASE_MS,
+      );
+      this._inLull = true;
+      this._lullTimer = lullDuration;
+      return [];
+    }
 
     this._pulseTimer -= delta;
     if (this._pulseTimer > 0) return [];
@@ -184,6 +225,20 @@ export class SpawnDirector {
   }
 
   // ── Internals ─────────────────────────────────────────────────────────
+
+  /**
+   * Begin a new wave cycle within the current stage.
+   * Each successive cycle receives a larger budget to ramp up pressure.
+   */
+  private _startNextWave() {
+    this._waveIndex++;
+    const scaledBudget = this._baseStageBudget * (1 + this._waveIndex * WAVE_INTENSITY_SCALE);
+    this._remainingBudget = scaledBudget;
+    this._pulseBudget = scaledBudget / this._pulseCount;
+    this._pulseIndex = 0;
+    this._pulseTimer = 0;
+    // Boss does not re-spawn within the same stage
+  }
 
   private _bossNeedSpawn(): boolean {
     return this._bossReserved && !this._bossSpawned;

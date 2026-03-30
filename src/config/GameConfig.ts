@@ -85,6 +85,38 @@ export const MIN_SPAWN_INTERVAL_MS = 400;
  */
 export const OVERTIME_MIN_SPAWN_INTERVAL_MS = 100;
 
+/**
+ * Base lull duration (ms) inserted between wave cycles within a stage.
+ * Gives the player brief breathing room to complete hack nodes.
+ * Decreases as the round and wave index increase.
+ */
+export const WAVE_LULL_BASE_MS = 5000;
+
+/**
+ * Minimum lull duration (ms) between wave cycles.
+ * The lull will never fall below this value regardless of round or wave index.
+ */
+export const WAVE_LULL_MIN_MS = 2000;
+
+/**
+ * Fractional budget growth applied each time a new wave cycle starts within
+ * a stage (e.g. 0.3 = +30% budget per wave cycle).  Ramps up pressure as
+ * the player lingers without completing the exit node.
+ */
+export const WAVE_INTENSITY_SCALE = 0.3;
+
+/**
+ * How many ms the lull shortens per round number.
+ * Higher rounds experience shorter breathing windows between wave cycles.
+ */
+export const WAVE_LULL_ROUND_DECREASE_MS = 150;
+
+/**
+ * How many ms the lull shortens per completed wave cycle within a stage.
+ * Later waves press harder with less recovery time between them.
+ */
+export const WAVE_LULL_WAVE_DECREASE_MS = 400;
+
 /** XP awarded for killing an enemy */
 export const XP_PER_KILL = 15;
 /** XP awarded for hacking a regular node */

@@ -514,15 +514,17 @@ export class GameScene extends Phaser.Scene {
       const maxEnemies = SPAWN_MAX_ENEMIES;
       const currentEnemies = this.enemies.getLength();
       const ctx = {
-        playerHpFrac: this.player.hp / (this.player.maxHp || PLAYER_MAX_HP),
+        playerHpFrac: this.player.hp / (this.player.maxHp ?? PLAYER_MAX_HP),
         aliveEnemies: currentEnemies,
         maxAllowedEnemies: maxEnemies,
       };
       const requests = this.spawnDirector.update(delta, ctx, this.player.x, this.player.y);
+      let spawned = 0;
       for (const req of requests) {
-        if (currentEnemies + requests.indexOf(req) >= maxEnemies) break;
+        if (currentEnemies + spawned >= maxEnemies) break;
         const enemy = new Enemy(this, req.x, req.y, req.speedMult, req.hpMult, req.type);
         this.enemies.add(enemy);
+        spawned++;
       }
 
       // In overtime keep spawning extra grunts on a fast timer to maintain pressure

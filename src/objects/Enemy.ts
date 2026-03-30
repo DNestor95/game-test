@@ -35,17 +35,19 @@ export class Enemy extends Phaser.GameObjects.Container {
    * When `typeConfig` is provided the enemy uses per-type stats and visuals.
    * The legacy overload (`speedMult`, `hpMult`) still works for backwards
    * compatibility — it produces a generic "grunt-like" enemy.
+   *
+   * @param speedMult  Round-based speed multiplier (default 1)
+   * @param hpMult     Round-based HP multiplier (default 1)
+   * @param typeConfig Optional typed enemy config — when omitted a generic enemy is created
    */
-  constructor(scene: Phaser.Scene, x: number, y: number, speedMult?: number, hpMult?: number, typeConfig?: EnemyTypeConfig) {
+  constructor(scene: Phaser.Scene, x: number, y: number, speedMult = 1, hpMult = 1, typeConfig?: EnemyTypeConfig) {
     super(scene, x, y);
 
     if (typeConfig) {
       // ── Typed enemy ──────────────────────────────────────────────────
       this.typeConfig = typeConfig;
-      const sMult = speedMult ?? 1;
-      const hMult = hpMult ?? 1;
-      this.speed = typeConfig.baseSpeed * sMult;
-      this.hp = Math.round(typeConfig.baseHp * hMult);
+      this.speed = typeConfig.baseSpeed * speedMult;
+      this.hp = Math.round(typeConfig.baseHp * hpMult);
       this.maxHp = this.hp;
       this.moneyReward = typeConfig.moneyReward;
       this.defaultStrokeColor = typeConfig.strokeColor;
@@ -58,10 +60,8 @@ export class Enemy extends Phaser.GameObjects.Container {
     } else {
       // ── Legacy single-type enemy ─────────────────────────────────────
       this.typeConfig = null;
-      const sMult = speedMult ?? 1;
-      const hMult = hpMult ?? 1;
-      this.speed = ENEMY_BASE_SPEED * sMult;
-      this.hp = Math.round(ENEMY_HP * hMult);
+      this.speed = ENEMY_BASE_SPEED * speedMult;
+      this.hp = Math.round(ENEMY_HP * hpMult);
       this.maxHp = this.hp;
       this.moneyReward = ENEMY_KILL_MONEY;
       this.defaultStrokeColor = 0xff2200;

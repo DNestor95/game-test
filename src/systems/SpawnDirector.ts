@@ -6,6 +6,7 @@
  * the GameScene (player state, enemy group).
  */
 
+import Phaser from 'phaser';
 import { EnemyTypeId, EnemyTypeConfig, ENEMY_TYPES, getSpawnWeights, pickEnemyType } from '../config/EnemyTypes';
 import {
   WORLD_WIDTH, WORLD_HEIGHT,
@@ -203,9 +204,6 @@ export class SpawnDirector {
     return { x, y };
   }
 }
-
-// We need Phaser for Math.Clamp — import at module level
-import Phaser from 'phaser';
 
 /** A single enemy spawn request emitted by the director. */
 export interface SpawnRequest {

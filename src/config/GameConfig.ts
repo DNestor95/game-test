@@ -4,7 +4,7 @@ export const GAME_HEIGHT = 800;
 export const WORLD_WIDTH = 2560;
 export const WORLD_HEIGHT = 1600;
 
-export const PLAYER_SPEED = 140;
+export const PLAYER_SPEED = 155;
 export const DASH_SPEED = 400;
 export const DASH_DURATION = 180;
 export const DASH_COOLDOWN = 2500;

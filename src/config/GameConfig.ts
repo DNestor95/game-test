@@ -1,8 +1,8 @@
-export const GAME_WIDTH = 800;
-export const GAME_HEIGHT = 600;
+export const GAME_WIDTH = 1280;
+export const GAME_HEIGHT = 800;
 
-export const WORLD_WIDTH = 1600;
-export const WORLD_HEIGHT = 1200;
+export const WORLD_WIDTH = 2560;
+export const WORLD_HEIGHT = 1600;
 
 export const PLAYER_SPEED = 140;
 export const DASH_SPEED = 400;
@@ -204,6 +204,16 @@ export interface Upgrade {
 }
 
 export const BEST_SCORE_KEY = 'netrunner_best_score';
+export const LEADERBOARD_KEY = 'netrunner_leaderboard';
+export const LEADERBOARD_MAX_ENTRIES = 15;
+export const LEADERBOARD_MAX_NAME_LENGTH = 12;
+
+export interface LeaderboardEntry {
+  name: string;
+  score: number;
+  rounds: number;
+  date: string;
+}
 
 /**
  * Weapon attachment that can be bought from mid-game shop nodes and applied

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, PLAYER_MAX_HP } from '../config/GameConfig';
+import { GAME_WIDTH, GAME_HEIGHT, PLAYER_MAX_HP } from '../config/GameConfig';
 
 /** Per-slot weapon info for the HUD display */
 export interface WeaponSlotHUD {
@@ -49,23 +49,24 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(1, 0);
 
     // Bottom bar (taller to accommodate 3 weapon slots)
-    this.add.rectangle(GAME_WIDTH / 2, 576, GAME_WIDTH, 48, 0x000000, 0.7);
+    const BOTTOM_BAR_Y = GAME_HEIGHT - 24;
+    this.add.rectangle(GAME_WIDTH / 2, BOTTOM_BAR_Y, GAME_WIDTH, 48, 0x000000, 0.7);
 
-    this.add.text(10, 564, 'HP', {
+    this.add.text(10, GAME_HEIGHT - 36, 'HP', {
       fontSize: '11px', color: '#ff4444', fontFamily: 'Courier New',
     });
     this.hpBar = this.add.graphics();
 
-    this.add.text(200, 564, 'HEAT', {
+    this.add.text(200, GAME_HEIGHT - 36, 'HEAT', {
       fontSize: '11px', color: '#ff6600', fontFamily: 'Courier New',
     });
     this.heatBar = this.add.graphics();
 
-    this.comboText = this.add.text(GAME_WIDTH / 2, 564, '', {
+    this.comboText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 36, '', {
       fontSize: '13px', color: '#00ffcc', fontFamily: 'Courier New',
     }).setOrigin(0.5, 0);
 
-    this.nodesText = this.add.text(GAME_WIDTH - 10, 564, 'NODES: 0/4', {
+    this.nodesText = this.add.text(GAME_WIDTH - 10, GAME_HEIGHT - 36, 'NODES: 0/4', {
       fontSize: '12px', color: '#00ff88', fontFamily: 'Courier New',
     }).setOrigin(1, 0);
 
@@ -74,28 +75,28 @@ export class UIScene extends Phaser.Scene {
       fontSize: '11px', color: '#888888', fontFamily: 'Courier New',
     }).setOrigin(0.5, 0);
 
-    // 3 weapon-slot displays in the lower strip (y≈584)
+    // 3 weapon-slot displays in the lower strip
     const SLOT_W = Math.floor(GAME_WIDTH / 3);
     this.weaponSlotBgs = [];
     this.weaponSlotTexts = [];
     for (let i = 0; i < 3; i++) {
       const slotX = i * SLOT_W;
-      const bg = this.add.rectangle(slotX + SLOT_W / 2, 585, SLOT_W - 4, 20, 0x111122)
+      const bg = this.add.rectangle(slotX + SLOT_W / 2, GAME_HEIGHT - 15, SLOT_W - 4, 20, 0x111122)
         .setStrokeStyle(1, 0x223344);
       this.weaponSlotBgs.push(bg);
-      const t = this.add.text(slotX + 6, 577, `[${i + 1}] ---`, {
+      const t = this.add.text(slotX + 6, GAME_HEIGHT - 23, `[${i + 1}] ---`, {
         fontSize: '10px', color: '#445566', fontFamily: 'Courier New',
       });
       this.weaponSlotTexts.push(t);
     }
 
     // Exit node status indicator
-    this.exitText = this.add.text(GAME_WIDTH - 10, 552, '', {
+    this.exitText = this.add.text(GAME_WIDTH - 10, GAME_HEIGHT - 48, '', {
       fontSize: '11px', color: '#ffcc00', fontFamily: 'Courier New',
     }).setOrigin(1, 0);
 
     // XP bar (just above the bottom bar) — label "LVL" + level number on the right side
-    this.levelText = this.add.text(GAME_WIDTH - 10, 551, 'LVL 1', {
+    this.levelText = this.add.text(GAME_WIDTH - 10, GAME_HEIGHT - 49, 'LVL 1', {
       fontSize: '11px', color: '#00aaff', fontFamily: 'Courier New',
     }).setOrigin(1, 1);
     this.xpBar = this.add.graphics();
@@ -136,17 +137,17 @@ export class UIScene extends Phaser.Scene {
     const hpFrac = Math.max(0, data.hp / PLAYER_MAX_HP);
     const hpColor = hpFrac > 0.5 ? 0x00cc44 : hpFrac > 0.25 ? 0xffcc00 : 0xff2200;
     this.hpBar.fillStyle(0x333333);
-    this.hpBar.fillRect(28, 566, 140, 10);
+    this.hpBar.fillRect(28, GAME_HEIGHT - 34, 140, 10);
     this.hpBar.fillStyle(hpColor);
-    this.hpBar.fillRect(28, 566, Math.floor(140 * hpFrac), 10);
+    this.hpBar.fillRect(28, GAME_HEIGHT - 34, Math.floor(140 * hpFrac), 10);
 
     this.heatBar.clear();
     const heatFrac = Math.min(1, Math.max(0, data.heat));
     this.heatBar.fillStyle(0x333333);
-    this.heatBar.fillRect(235, 566, 130, 10);
+    this.heatBar.fillRect(235, GAME_HEIGHT - 34, 130, 10);
     const heatColor = heatFrac > 0.7 ? 0xff2200 : heatFrac > 0.4 ? 0xff6600 : 0xff9900;
     this.heatBar.fillStyle(heatColor);
-    this.heatBar.fillRect(235, 566, Math.floor(130 * heatFrac), 10);
+    this.heatBar.fillRect(235, GAME_HEIGHT - 34, Math.floor(130 * heatFrac), 10);
 
     if (data.combo > 0) {
       this.comboText.setText(`COMBO x${data.combo + 1}`);
@@ -197,15 +198,15 @@ export class UIScene extends Phaser.Scene {
       this.exitText.setText('[EXIT NODE: FIND IT]');
     }
 
-    // XP bar — drawn just above the bottom bar (y ≈ 549)
+    // XP bar — drawn just above the bottom bar
     this.xpBar.clear();
     const xpFrac = data.xpToNext > 0 ? Math.min(1, data.xp / data.xpToNext) : 0;
     const XP_X = 390;
     const XP_W = 180;
     this.xpBar.fillStyle(0x222244);
-    this.xpBar.fillRect(XP_X, 550, XP_W, 8);
+    this.xpBar.fillRect(XP_X, GAME_HEIGHT - 50, XP_W, 8);
     this.xpBar.fillStyle(0x0088ff);
-    this.xpBar.fillRect(XP_X, 550, Math.floor(XP_W * xpFrac), 8);
+    this.xpBar.fillRect(XP_X, GAME_HEIGHT - 50, Math.floor(XP_W * xpFrac), 8);
     this.levelText.setText(`LVL ${data.playerLevel}`);
   }
 

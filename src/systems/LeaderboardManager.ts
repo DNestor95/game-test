@@ -31,17 +31,20 @@ export class LeaderboardManager {
   static addEntry(entry: LeaderboardEntry): number {
     // Re-read to avoid overwriting concurrent sessions
     const entries = this.getEntries();
-    entries.push(entry);
+
+    // Tag entry with a unique id so we can find it reliably after sort
+    const tagged = { ...entry, _id: Date.now() + Math.random() };
+    (entries as any[]).push(tagged);
     entries.sort((a, b) => b.score - a.score);
     const trimmed = entries.slice(0, LEADERBOARD_MAX_ENTRIES);
-    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(trimmed));
 
-    const rank = trimmed.findIndex(
-      (e) =>
-        e.name === entry.name &&
-        e.score === entry.score &&
-        e.date === entry.date,
-    );
+    // Find rank by reference identity
+    const rank = (trimmed as any[]).findIndex((e) => e._id === tagged._id);
+
+    // Strip internal tag before persisting
+    const clean = trimmed.map(({ _id, ...rest }: any) => rest);
+    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(clean));
+
     return rank >= 0 ? rank + 1 : 0;
   }
 

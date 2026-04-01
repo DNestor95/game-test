@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, BEST_SCORE_KEY } from '../config/GameConfig';
+import { GAME_WIDTH, GAME_HEIGHT, BEST_SCORE_KEY, LEADERBOARD_MAX_NAME_LENGTH } from '../config/GameConfig';
 import { LeaderboardManager } from '../systems/LeaderboardManager';
 
 export class MenuScene extends Phaser.Scene {
@@ -114,8 +114,8 @@ export class MenuScene extends Phaser.Scene {
         fontSize: '12px', color: rankColor, fontFamily: 'Courier New',
       });
 
-      const displayName = entry.name.length > 12
-        ? entry.name.substring(0, 12)
+      const displayName = entry.name.length > LEADERBOARD_MAX_NAME_LENGTH
+        ? entry.name.substring(0, LEADERBOARD_MAX_NAME_LENGTH)
         : entry.name;
       this.add.text(NAME_X, y, displayName, {
         fontSize: '12px', color: nameColor, fontFamily: 'Courier New',
